@@ -61,17 +61,28 @@ describe('the trigger catalogue is the one the sidecar accepts', () => {
   })
 })
 
-describe('the handoff catalogue is the official table, and says it is pending', () => {
+/** The `(from, to, reason): (expects, ...)` rows of hermes_bridge/handoff.py */
+function pythonHandoffs(): Array<{ from: string; to: string; reason: string; expects: string }> {
+  const src = readFileSync(join(ROOT, 'hermes_bridge', 'handoff.py'), 'utf8')
+  const start = src.indexOf('HANDOFF_TABLE: dict[')
+  expect(start, 'HANDOFF_TABLE not found in handoff.py').toBeGreaterThan(-1)
+  const end = src.indexOf('\n}', start)
+  return [...src.slice(start, end).matchAll(
+    /\(\s*'([A-Za-z]+)',\s*'([A-Za-z]+)',\s*'([a-z_]+)'\):\s*\('([a-z_]+)'/g,
+  )].map(m => ({ from: m[1], to: m[2], reason: m[3], expects: m[4] }))
+}
+
+describe('the handoff catalogue is the official table the protocol enforces', () => {
   it('every row of AGENT-HANDOFFS.md §3, with its expects', () => {
     const rows = HANDOFFS.map(h => ({ from: h.from, to: h.to, reason: h.reason, expects: h.expects }))
     expect(rows).toEqual(docHandoffs())
   })
 
-  it('all pending while nothing consumes them (W8 adds hermes_bridge/handoff.py)', () => {
-    // When W8 lands this file exists and the rows must stop saying "pending":
-    // the failure is the reminder, not a bug
-    expect(existsSync(join(ROOT, 'hermes_bridge', 'handoff.py'))).toBe(false)
-    expect(HANDOFFS.every(h => h.pending === true)).toBe(true)
+  it('W8 landed: hermes_bridge/handoff.py enforces the same rows', () => {
+    expect(existsSync(join(ROOT, 'hermes_bridge', 'handoff.py'))).toBe(true)
+    expect(pythonHandoffs()).toEqual(docHandoffs())
+    // The rows are no longer a wish list: nothing is marked pending
+    expect(HANDOFFS.every(h => !('pending' in h))).toBe(true)
   })
 })
 

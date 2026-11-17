@@ -67,9 +67,10 @@ Didaftarkan sekarang, karena kerjaannya sudah ada di `webhook_server/jobs.py`:
 | `shared_context_cleanup` | `cleanup_shared_context` | 24 jam; baris `ts` mundur diuji di selfcheck |
 | `approval_sweep` | `sweep_approvals` | TTL 24 jam, angka yang sama dengan `approval.TTL_S` |
 | `db_backup` | `backup_databases` | `~/.hermes-office/backups/YYYY-MM-DD/` |
+| `handoff_check` | `check_handoffs` | tiap 15 menit; **satu** card untuk semua handoff telat, tiga opsi (eskalasi / perpanjang / abaikan) |
 
 Belum didaftarkan, dan **sengaja tidak** didaftarkan sebagai job kosong: `weekly_report`,
-`cache_warmer`, `recommendation_batch` (W6) dan `handoff_check` (W8). `start_scheduler()` menulis satu baris per job itu saat start, dan
+`cache_warmer`, `recommendation_batch` (W6). `start_scheduler()` menulis satu baris per job itu saat start, dan
 `GET /health` mengembalikan daftarnya di `pending_jobs` beserta alasannya — jadi yang belum ada
 terlihat sebagai belum ada. Zona waktu: `HERMES_TZ` (default `Asia/Jakarta`).
 

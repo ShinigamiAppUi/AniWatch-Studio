@@ -34,8 +34,6 @@ export interface HandoffRoute {
   to: string
   reason: string
   expects: string
-  /** True while nothing consumes handoffs yet (W8); the card draws it as pending */
-  pending: true
 }
 
 /** The 13 triggers `POST /webhook` accepts, in the order the docs list them */
@@ -55,20 +53,20 @@ export const TRIGGERS: TriggerRoute[] = [
   { trigger: 'user_report', role: 'UserReportAgent' },
 ]
 
-/** The official handoffs, all pending until `hermes_bridge/handoff.py` exists (W8) */
+/** The official handoffs: the protocol exists (`hermes_bridge/handoff.py`, W8) */
 export const HANDOFFS: HandoffRoute[] = [
-  { from: 'Sales', to: 'Marketing', reason: 'lead_converted', expects: 'welcome_email_campaign', pending: true },
-  { from: 'Sales', to: 'Support', reason: 'meeting_scheduled', expects: 'pre_meeting_brief', pending: true },
-  { from: 'Marketing', to: 'Support', reason: 'customer_onboarding', expects: 'onboarding_followup', pending: true },
-  { from: 'Support', to: 'Orchestrator', reason: 'ticket_unresolved', expects: 'escalate_to_human', pending: true },
-  { from: 'UserReportAgent', to: 'Support', reason: 'report_account', expects: 'handle_billing', pending: true },
-  { from: 'UserReportAgent', to: 'QualityChecker', reason: 'report_technical', expects: 'recheck_episode', pending: true },
-  { from: 'PaymentAgent', to: 'RevenueTracker', reason: 'payment_settled', expects: 'record_transaction', pending: true },
-  { from: 'PaymentAgent', to: 'SecOps', reason: 'chargeback', expects: 'flag_account', pending: true },
-  { from: 'DMCA', to: 'EpisodeScheduler', reason: 'takedown', expects: 'cancel_schedule', pending: true },
-  { from: 'Scraper', to: 'Metadata', reason: 'episode_fetched', expects: 'enrich_metadata', pending: true },
-  { from: 'QualityChecker', to: 'Orchestrator', reason: 'qc_failed', expects: 'retry_or_escalate', pending: true },
-  { from: 'Orchestrator', to: 'Manusia', reason: 'escalate', expects: 'decide', pending: true },
+  { from: 'Sales', to: 'Marketing', reason: 'lead_converted', expects: 'welcome_email_campaign' },
+  { from: 'Sales', to: 'Support', reason: 'meeting_scheduled', expects: 'pre_meeting_brief' },
+  { from: 'Marketing', to: 'Support', reason: 'customer_onboarding', expects: 'onboarding_followup' },
+  { from: 'Support', to: 'Orchestrator', reason: 'ticket_unresolved', expects: 'escalate_to_human' },
+  { from: 'UserReportAgent', to: 'Support', reason: 'report_account', expects: 'handle_billing' },
+  { from: 'UserReportAgent', to: 'QualityChecker', reason: 'report_technical', expects: 'recheck_episode' },
+  { from: 'PaymentAgent', to: 'RevenueTracker', reason: 'payment_settled', expects: 'record_transaction' },
+  { from: 'PaymentAgent', to: 'SecOps', reason: 'chargeback', expects: 'flag_account' },
+  { from: 'DMCA', to: 'EpisodeScheduler', reason: 'takedown', expects: 'cancel_schedule' },
+  { from: 'Scraper', to: 'Metadata', reason: 'episode_fetched', expects: 'enrich_metadata' },
+  { from: 'QualityChecker', to: 'Orchestrator', reason: 'qc_failed', expects: 'retry_or_escalate' },
+  { from: 'Orchestrator', to: 'Manusia', reason: 'escalate', expects: 'decide' },
 ]
 
 /** One trigger on its way through the Orchestrator, keyed by the Orchestrator's agent id */
@@ -172,7 +170,7 @@ export function reduceOrchestrator(state: OrchestratorState, event: OfficeAction
   return routing === state.routing ? state : { ...state, routing }
 }
 
-/** The handoffs as the card draws them: the catalogue, pending until W8 */
+/** The handoffs as the card draws them: the official table, now enforced by the protocol */
 export function handoffRows(): HandoffRoute[] {
   return HANDOFFS
 }

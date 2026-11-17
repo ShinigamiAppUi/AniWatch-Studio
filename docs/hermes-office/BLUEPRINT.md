@@ -255,7 +255,8 @@ Premium & payment
 
 Frontend & docs
 - [x] `BizMetricsPanel` menampilkan data live (`src/components/BizMetricsPanel.tsx`)
-- [x] `OrchestratorCard` menampilkan alur trigger + handoff pending
-      (`src/components/OrchestratorCard.tsx`); `run_orchestrator` di Python menyusul di W8
+- [x] `OrchestratorCard` menampilkan alur trigger + tabel handoff resmi
+      (`src/components/OrchestratorCard.tsx`); `run_orchestrator` + protokol handoff ada di
+      `hermes_agents/orchestrator.py` dan `hermes_bridge/handoff.py` (W8)
 - [ ] Slash command baru terdaftar di chat routing
 - [ ] `npm run doctor` semua green

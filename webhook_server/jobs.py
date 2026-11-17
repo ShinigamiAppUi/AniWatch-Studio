@@ -81,6 +81,66 @@ def sla_check(timeout: float = 300.0) -> dict:
         return SupportAgent().check_sla_breaches(char=char, timeout=timeout)
 
 
+#: What the human can do with a handoff nobody picked up (SCHEDULER.md §2)
+HANDOFF_OPTIONS = ('Eskalasi ke manusia', 'Perpanjang 1 jam', 'Abaikan')
+
+
+def check_handoffs(timeout: float = 300.0, now: float | None = None, char=None) -> dict:
+    """Late handoffs: one card for all of them, three options (W8).
+
+    AGENT-HANDOFFS.md §5.5: "timeout = eskalasi". The chain itself is followed
+    immediately by `triggers.run_trigger`; this job only bills what nobody ever
+    took, so a forgotten handoff cannot sit in SharedContext until the 03.00
+    cleanup and disappear.
+
+    One card for the whole batch, like `sla_check` - a chain that died should not
+    wake the same agent once per hop. Returns `{expired, decision, handled}`.
+    """
+    from hermes_agents.base import Agent
+    from hermes_agents.orchestrator import escalate_to_human
+    from hermes_bridge import db as bdb
+    from hermes_bridge import handoff
+
+    bdb.init_db()
+    late = handoff.expired(now)
+    if not late:
+        return {'expired': 0, 'decision': None, 'handled': 0}
+
+    pairs = ', '.join(f"{env.get('from')} -> {env.get('to')} ({env.get('subject')})"
+                      for env in list(late.values())[:5])
+    message = f'{len(late)} handoff lewat deadline: {pairs}'
+    def _run(character) -> tuple[str, int]:
+        character.update(message[:200], tool='monitor_agents')
+        choice = character.ask(message, list(HANDOFF_OPTIONS), timeout=timeout)
+        count = 0
+        if choice == HANDOFF_OPTIONS[0]:
+            for key, env in late.items():
+                payload = env.get('payload') or {}
+                escalate_to_human({'subject': env.get('subject'), 'reason': env.get('reason'),
+                                   'ticket': payload.get('ticket'), 'summary': message}, now=now)
+                handoff.drop(key)
+                count += 1
+        elif choice == HANDOFF_OPTIONS[1]:
+            for key in late:
+                handoff.extend(key, 3600.0, now=now)
+                count += 1
+        elif choice == HANDOFF_OPTIONS[2]:
+            for key in late:
+                handoff.drop(key)
+                count += 1
+        character.update(f'{count} handoff ditangani: {choice}')
+        return choice, count
+
+    if char is not None:
+        decision, handled = _run(char)
+    else:
+        with Agent('Orchestrator', 'cek handoff') as character:
+            decision, handled = _run(character)
+    log.info('handoff_check: %d lewat deadline, keputusan=%s, ditangani=%d',
+             len(late), decision, handled)
+    return {'expired': len(late), 'decision': decision, 'handled': handled}
+
+
 def check_new_emails(fetch=None, timeout_warn_s: float = 3600.0) -> list[dict]:
     """Read the support inbox and turn every new mail into a ticket (W5).
 

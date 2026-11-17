@@ -170,6 +170,26 @@ men-deploy; approval dari card dan dari `/approve` menghasilkan status yang sama
 muncul berurutan, `handoff:*` terisi lalu dibaca); pipeline episode dan rantai sales sama-sama
 lulus.
 
+**Status W8:** protokol + graph selesai di `hermes_bridge/handoff.py` dan
+`hermes_agents/orchestrator.py`.
+
+- [x] `hermes_bridge/handoff.py`: `hand_off` / `take` / `pending` / `expired` / `extend` / `drop`
+  dengan **tabel transisi resmi** (12 baris AGENT-HANDOFFS.md §3). Transisi di luar tabel =
+  `UnknownHandoff`; `expects` dan field payload wajib diperiksa, jadi handoff yang tidak bisa
+  dikerjakan tidak pernah ditulis.
+- [x] `build_orchestrator_graph()` + `run_orchestrator()`: satu node per role, `MAX_HOPS = 4`,
+  mengikuti rantai dengan **mengambil** handoff (satu handoff, satu penerima). Tanpa LangGraph —
+  bukan dependensi fork ini, dan graph-nya hanya jalan pendek di atas dict.
+- [x] `handoff_check` (tiap 15 menit): handoff lewat `deadline` → **satu** card, tiga opsi
+  (`Eskalasi ke manusia` / `Perpanjang 1 jam` / `Abaikan`).
+- [x] Rantai nyata hari ini: `Support → Orchestrator` (`ticket_unresolved`). `SupportAgent.escalate`
+  kini menulis handoff, `run_trigger` langsung mengikutinya, dan Orchestrator mencatat
+  `escalation:<ticket>` untuk manusia — tanpa memblokir worker dengan kartu izin.
+- [ ] Karakter Sales/Marketing: protocol-nya lulus di selfcheck dengan tiga node (termasuk payload
+  yang berpindah), tapi **agent** Sales dan Marketing baru ada di W6 — jadi "tiga karakter muncul
+  berurutan" belum bisa dibuktikan di kantor. Yang terbukti: tiga node berjalan berurutan dan
+  `handoff:*` kosong lagi setelahnya.
+
 ### W9 — Finance, Legal, Security
 
 - RevenueTracker, PaymentAgent, DMCA, SecOps

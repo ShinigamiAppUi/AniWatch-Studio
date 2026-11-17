@@ -53,7 +53,8 @@ dengan DMCA cancel yang menang balapan dan penjaga duplikat. 37 cek lama di self
 - Tombol **biz** (panel metrik bisnis: leads, email, tiket, CRM, refund, chargeback, SLA, siapa yang
   bekerja) membaca `GET /biz-metrics` dan `biz_metric_update`.
 - Tombol **orch** (kartu Orchestrator): trigger yang sedang dirutekan, yang sudah lewat, katalog 13
-  trigger, dan 12 handoff resmi yang ditandai **pending** (W8).
+  trigger, dan 12 handoff resmi (saat rilis ditandai `pending`; sejak Rev 3.6 chip-nya `protokol`
+  karena protokol handoff sudah ada).
 - Kartu approval memakai warna/emoji yang benar untuk 14 role camelCase & akronim (`PaymentAgent`,
   `SEO`, `DMCA`, …) yang sebelumnya jatuh ke default.
 
@@ -76,7 +77,7 @@ dengan DMCA cancel yang menang balapan dan penjaga duplikat. 37 cek lama di self
 | W6 | Marketing, CacheWarmer, RecommendationAgent, `weekly_report`, `cache_warmer`, `recommendation_batch` |
 | W5 sisa | ~~`email_check`, OpsAgent, Subtitle + Moderator~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.5 |
 | W7 | DesignAgent (premium) |
-| W8 | `run_orchestrator` di Python + protokol handoff (`hermes_bridge/handoff.py`), `handoff_check` |
+| W8 | ~~`run_orchestrator`, protokol handoff, `handoff_check`~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.6 |
 | W9 | Finance, Legal, Security: refund/chargeback end-to-end, DMCA otomatis |
 | W10 | Dashboard lengkap, slash command sisanya |
 
@@ -85,8 +86,9 @@ Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
 
 > **Setelah tag v0.5.0** (Rev 3.5, commit berikutnya): sisa W5 ditutup — `Moderator`, `OpsAgent`
 > (`ops_check` tiap jam), dan `email_check` yang **membaca** inbox lewat IMAP stdlib
-> (`hermes_agents/inbox.py`). `pending_jobs` kini 4, semuanya milik W6/W8. Tag tetap menunjuk
-> commit rilis pertama; catatan lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5.
+> (`hermes_agents/inbox.py`). W8 juga ditutup (Rev 3.6): protokol handoff, `run_orchestrator`, dan
+> job `handoff_check`. `pending_jobs` kini 3, semuanya milik W6. Tag tetap menunjuk commit rilis
+> pertama; catatan lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5–3.6.
 
 ### Cara menjalankan
 

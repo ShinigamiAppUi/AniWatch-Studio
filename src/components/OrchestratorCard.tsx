@@ -7,10 +7,11 @@
  * the office's own events), so the card fetches nothing and works on a
  * read-only page: it is a view, not a client.
  *
- * "Pending" is said out loud rather than hidden: the 13 trigger routes are live
- * (`webhook_server/triggers.py`), but every handoff in AGENT-HANDOFFS.md §3 is
- * waiting on W8, and the card draws them greyed with a `pending` chip instead
- * of pretending they happen.
+ * The 13 trigger routes are live (`webhook_server/triggers.py`) and so is the
+ * handoff protocol (`hermes_bridge/handoff.py`, W8): the table below is the
+ * contract the code enforces. A row only *runs* when the sending agent exists,
+ * so the card keeps them dim with a `protokol` chip rather than claiming a
+ * chain that no agent can start yet.
  */
 
 import React from 'react'
@@ -111,12 +112,12 @@ const OrchestratorCard: React.FC<OrchestratorCardProps> = ({ state, onClose, anc
       </div>
 
       <div className="orch-section">
-        <div className="orch-head">handoffs · pending</div>
+        <div className="orch-head">handoffs · protokol</div>
         <div className="orch-grid orch-handoffs" data-testid="orch-handoffs">
           {handoffRows().map(h => (
             <div className="orch-row orch-dim" key={h.reason}>
               <span className="orch-name">{h.from} → {h.to}</span>
-              <span className="orch-chip">pending</span>
+              <span className="orch-chip">protokol</span>
             </div>
           ))}
         </div>

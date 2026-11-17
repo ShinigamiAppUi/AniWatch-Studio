@@ -234,6 +234,16 @@ class SupportAgent:
         )
         con.commit()
         self._remember(ticket_id, {'escalation': _text(reason, 400), 'escalated_at': at})
+        # W8: escalation is a handoff, not a function call (AGENT-HANDOFFS.md §3).
+        # The Orchestrator picks this up on the same run and records it for a
+        # human; without a taker it expires and `handoff_check` bills it.
+        try:
+            from hermes_bridge import handoff
+
+            handoff.hand_off('Support', 'Orchestrator', 'ticket_unresolved', f'ticket:{ticket_id}',
+                            {'ticket': ticket_id, 'reason': _text(reason, 200)}, now=at)
+        except Exception as err:  # noqa: BLE001 - the ticket is escalated either way
+            log.warning('support: handoff eskalasi %s gagal: %s', ticket_id, err)
         log.info('support: tiket %s dieskalasi: %s', ticket_id, reason)
         return {'id': ticket_id, 'status': 'escalated', 'assignee': 'Orchestrator'}
 

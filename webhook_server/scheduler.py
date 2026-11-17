@@ -40,7 +40,7 @@ PENDING_JOBS: dict[str, str] = {
     'weekly_report': 'butuh MarketingAgent + Orchestrator (W6/W8)',
     'cache_warmer': 'butuh CacheWarmerAgent (W6)',
     'recommendation_batch': 'butuh RecommendationAgent (W6)',
-    'handoff_check': 'butuh protokol handoff + Orchestrator (W8)',
+
 }
 
 _sched: BackgroundScheduler | None = None
@@ -88,6 +88,8 @@ def start_scheduler() -> BackgroundScheduler:
                       id='email_check', **COMMON)
         sched.add_job(_guard(jobs.run_ops_check), IntervalTrigger(hours=1),
                       id='ops_check', **COMMON)
+        sched.add_job(_guard(jobs.check_handoffs), IntervalTrigger(minutes=15),
+                      id='handoff_check', **COMMON)
         sched.add_job(_guard(jobs.backup_databases), 'cron', hour=2,
                       id='db_backup', **COMMON)
         sched.start()

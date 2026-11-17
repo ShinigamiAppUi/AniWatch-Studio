@@ -1,5 +1,30 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 3.6 — 17 Nov 2026 (W8: Orchestrator + handoff)
+
+### Ditambahkan
+
+- `hermes_bridge/handoff.py`: protokol handoff dengan **tabel transisi resmi** (12 baris
+  AGENT-HANDOFFS.md §3). `hand_off` menolak transisi di luar tabel (`UnknownHandoff`), `expects`
+  yang tidak cocok, dan payload yang kurang field; `take` hanya untuk role yang dituju dan sekali
+  pakai; `expired` / `extend` / `drop` untuk job `handoff_check`.
+- `hermes_agents/orchestrator.py`: `build_orchestrator_graph()` (node per role, `MAX_HOPS = 4`,
+  role tanpa agent = `skipped`), `run_orchestrator()`, `follow_chain()`, `escalate_to_human()`,
+  `graph_summary()`. Tanpa LangGraph: graph-nya jalan pendek di atas dict, bukan state machine.
+- Job `handoff_check` (tiap 15 menit): handoff lewat `deadline` → **satu** card, tiga opsi
+  (eskalasi / perpanjang 1 jam / abaikan); `timeout` tidak mengubah apa pun.
+
+### Diubah
+
+- `SupportAgent.escalate` menulis handoff `Support → Orchestrator (ticket_unresolved)`, bukan
+  sekadar `UPDATE`; `triggers.run_trigger` langsung mengikuti rantainya, dan Orchestrator mencatat
+  `escalation:<ticket>` untuk manusia.
+- Scheduler: **8 job** hidup (tambah `handoff_check`), `PENDING_JOBS` tinggal 3 (semuanya W6).
+- Selfcheck: **113 PASS / 0 FAIL** (12 cek W8 baru, termasuk rantai Sales → Marketing → Support
+  dengan tiga node dan handoff yang habis diambil).
+
+---
+
 ## Rev 3.5 — 17 Nov 2026 (W4 & W5 ditutup)
 
 ### Ditambahkan

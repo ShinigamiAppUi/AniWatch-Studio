@@ -283,14 +283,14 @@ def main() -> int:
     sched1 = start_scheduler()
     sched2 = start_scheduler()
     ids = sorted(job.id for job in sched1.get_jobs())
-    check('w4: the scheduler registers the seven jobs that exist',
-          ids == ['approval_sweep', 'db_backup', 'email_check', 'episode_embargo',
+    check('w4: the scheduler registers the eight jobs that exist',
+          ids == ['approval_sweep', 'db_backup', 'email_check', 'episode_embargo', 'handoff_check',
                   'ops_check', 'shared_context_cleanup', 'sla_check'], str(ids))
-    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 7)
+    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 8)
     check('w4: /health can list the running jobs',
-          len(registered_jobs()) == 7 and len(pending_jobs()) == 4)
-    check('w4: the four unbuilt jobs are named, not faked',
-          len(PENDING_JOBS) == 4 and all(reason.strip() for reason in PENDING_JOBS.values()))
+          len(registered_jobs()) == 8 and len(pending_jobs()) == 3)
+    check('w4: the three unbuilt jobs are named, not faked',
+          len(PENDING_JOBS) == 3 and all(reason.strip() for reason in PENDING_JOBS.values()))
     shutdown_scheduler()
     check('w4: shutdown leaves no scheduler running', registered_jobs() == [])
 
@@ -627,9 +627,129 @@ def main() -> int:
           and inbox_mod.configured() is False)
     os.environ['IMAP_HOST'] = 'imap.example'
     pending_ids = [job['id'] for job in pending_jobs()]
-    check('w5: email_check and ops_check are registered, leaving four pending',
+    check('w5: email_check and ops_check are registered, leaving three pending',
           'email_check' not in pending_ids and 'ops_check' not in pending_ids
-          and len(pending_ids) == 4, str(pending_ids))
+          and len(pending_ids) == 3, str(pending_ids))
+
+    # 9. W8: protokol handoff + graph Orchestrator ----------------------------
+    from hermes_agents import orchestrator as orch
+    from hermes_bridge import handoff as ho
+    from hermes_bridge import shared_context as sc
+
+    ctx = sc.default()
+    for stale_key in list(ho.pending(context=ctx)):
+        ho.drop(stale_key, context=ctx)
+
+    try:
+        ho.hand_off('Sales', 'SecOps', 'random_reason', 'lead:1', {'x': 1}, context=ctx)
+        refused_transition = False
+    except ho.UnknownHandoff:
+        refused_transition = True
+    check('w8: a transition that is not a row in AGENT-HANDOFFS §3 is refused',
+          refused_transition)
+
+    try:
+        ho.hand_off('Sales', 'Marketing', 'lead_converted', 'lead:1', {'name': 'Budi'}, context=ctx)
+        refused_payload = False
+    except ValueError:
+        refused_payload = True
+    check('w8: a payload missing what the table promises is refused', refused_payload)
+
+    key = ho.hand_off('Sales', 'Marketing', 'lead_converted', 'lead:42',
+                      {'name': 'Budi', 'email': 'budi@example.com', 'score': 0.87,
+                       'plan': 'premium'}, now=now, context=ctx)
+    wrong_owner = ho.take(key, 'Support', context=ctx)
+    envelope = ho.take(key, 'Marketing', context=ctx) or {}
+    check('w8: the envelope has the documented key and every field',
+          key == 'handoff:sales:marketing:42'
+          and set(envelope) == set(ho.ENVELOPE_FIELDS)
+          and envelope.get('expects') == 'welcome_email_campaign', str(envelope))
+    check('w8: only the addressed role can take a handoff, and only once',
+          wrong_owner is None and ho.take(key, 'Marketing', context=ctx) is None,
+          str(wrong_owner))
+
+    seen: list[str] = []
+
+    def _sales(data):
+        seen.append('Sales')
+        ho.hand_off('Sales', 'Marketing', 'lead_converted', 'lead:7',
+                    {'name': 'Sari', 'email': 'sari@example.com', 'score': 0.9, 'plan': 'premium'},
+                    now=now, context=ctx)
+        return {'action': 'qualified'}
+
+    def _marketing(data):
+        seen.append(f'Marketing:{data.get("name")}')
+        ho.hand_off('Marketing', 'Support', 'customer_onboarding', 'lead:7',
+                    {'plan': data.get('plan'), 'channel': 'web'}, now=now, context=ctx)
+        return {'action': 'welcome_sent'}
+
+    def _support_chain(data):
+        seen.append(f'Support:{data.get("reason")}')
+        return {'action': 'onboarding_ticket'}
+
+    graph = orch.build_orchestrator_graph(
+        {'Sales': _sales, 'Marketing': _marketing, 'Support': _support_chain}, context=ctx)
+    walked = graph.invoke('Sales', {})
+    check('w8: Sales -> Marketing -> Support runs as one chain with the payload',
+          walked['visited'] == ['Sales', 'Marketing', 'Support']
+          and seen == ['Sales', 'Marketing:Sari', 'Support:customer_onboarding'], str(seen))
+    check('w8: each handoff is consumed, so nothing is left behind',
+          ho.pending(context=ctx) == {}, str(list(ho.pending(context=ctx))))
+
+    ho.hand_off('UserReportAgent', 'QualityChecker', 'report_technical', 'report:rp-1',
+                {'episode_id': 'e-1'}, now=now, context=ctx)
+    stopped = orch.build_orchestrator_graph(context=ctx).follow_chain('UserReportAgent')
+    check('w8: a handoff to an agent that does not exist stops with "skipped"',
+          len(stopped) == 1 and 'skipped' in (stopped[0]['work'] or {})
+          and ho.pending(context=ctx) == {}, str(stopped))
+
+    escalated = w4triggers.run_trigger(
+        'support_ticket', {'subject': 'xyzzy plugh', 'body': 'qwerty zxcv', 'user_id': 'u-esc'})
+    hops = escalated.get('chain') or []
+    records = ctx.find('escalation:')
+    check('w8: a Support escalation is a handoff the Orchestrator picks up',
+          (escalated.get('work') or {}).get('action') == 'escalated'
+          and [(hop['from'], hop['to']) for hop in hops] == [('Support', 'Orchestrator')]
+          and len(records) >= 1, str(hops))
+
+    late = ho.hand_off('Scraper', 'Metadata', 'episode_fetched', 'episode:e-late',
+                       {'episode_id': 'e-late'}, now=now - 7200, deadline=now - 3600, context=ctx)
+    check('w8: a handoff past its deadline is the only one reported expired',
+          late in ho.expired(now, context=ctx) and not ho.expired(now - 7200, context=ctx),
+          str(list(ho.expired(now, context=ctx))))
+
+    class _ChainChar:
+        """The three-button card, answered without a browser."""
+
+        def __init__(self, pick: str) -> None:
+            self.pick = pick
+
+        def update(self, *args, **kwargs) -> None:
+            pass
+
+        def ask(self, message: str, options: list[str], timeout: float = 300.0) -> str:
+            return self.pick
+
+    extended = w4jobs.check_handoffs(now=now, char=_ChainChar(w4jobs.HANDOFF_OPTIONS[1]))
+    check('w8: "Perpanjang 1 jam" moves the deadline and keeps the handoff',
+          extended['handled'] == 1 and late in ho.pending(context=ctx)
+          and float(ho.get(late, context=ctx)['deadline']) > now, str(extended))
+
+    ho.extend(late, -7200.0, now=now, context=ctx)
+    to_human = w4jobs.check_handoffs(now=now, char=_ChainChar(w4jobs.HANDOFF_OPTIONS[0]))
+    check('w8: "Eskalasi ke manusia" drops the handoff and records the decision',
+          to_human['handled'] == 1 and late not in ho.pending(context=ctx)
+          and len(ctx.find('escalation:')) > len(records), str(to_human))
+
+    ignored = ho.hand_off('Scraper', 'Metadata', 'episode_fetched', 'episode:e-ignore',
+                          {'episode_id': 'e-ignore'}, now=now - 7200, deadline=now - 3600, context=ctx)
+    dropped = w4jobs.check_handoffs(now=now, char=_ChainChar(w4jobs.HANDOFF_OPTIONS[2]))
+    check('w8: "Abaikan" throws the handoff away without escalating it',
+          dropped['handled'] == 1 and ignored not in ho.pending(context=ctx), str(dropped))
+
+    pending_ids = [job['id'] for job in pending_jobs()]
+    check('w8: handoff_check is registered, leaving three pending jobs',
+          'handoff_check' not in pending_ids and len(pending_ids) == 3, str(pending_ids))
 
     support.close()
 

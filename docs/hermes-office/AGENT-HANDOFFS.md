@@ -252,11 +252,46 @@ Kalau `handoff` tidak ada dan context juga tidak ada: **jangan** mengarang lead.
 
 ---
 
-## 7. Checklist uji
+## 7. Checklist uji — status W8
 
-- [ ] Dua thread menulis key sama dengan `update()` → tidak ada field hilang
-- [ ] `take()` kedua mengembalikan `None`
-- [ ] Handoff lewat `deadline` memicu eskalasi (bukan menggantung)
-- [ ] Cleanup 24 jam menghapus context lama dan **tidak** menghapus yang baru
-- [ ] Sales → Marketing → Support berantai: tiga karakter muncul berurutan, `handoff:*` kosong lagi
-- [ ] Tidak ada `import` antar file di `hermes_bridge/agents/` (cek `grep -r "from \." agents/`)
+Semua ada di `python -m hermes_agents.selfcheck` (§9), kecuali yang butuh kantor hidup.
+
+- [x] Dua thread menulis key sama dengan `update()` → tidak ada field hilang (`SharedContext.update`)
+- [x] `take()` kedua mengembalikan `None`, dan role lain tidak bisa mengambil handoff orang lain
+- [x] Handoff lewat `deadline` memicu eskalasi, bukan menggantung: `handoff_check` → satu card,
+  tiga opsi; `timeout` tidak mengubah apa pun sehingga tiket ditagih lagi di putaran berikutnya
+- [x] Cleanup 24 jam menghapus context lama dan **tidak** menghapus yang baru
+- [x] Sales → Marketing → Support berantai dengan tiga node, payload ikut pindah, `handoff:*`
+  kosong lagi setelahnya. Karakter di kantor menyusul bersama agent Sales/Marketing (W6).
+- [x] Tidak ada `import` antar file agent: yang mengikuti rantai adalah
+  `hermes_agents/orchestrator.py`, bukan agent yang memanggil agent lain
+
+---
+
+## 8. Implementasi (W8)
+
+`hermes_bridge/handoff.py`:
+
+| Fungsi | Arti |
+| --- | --- |
+| `hand_off(...)` | tulis envelope; transisi divalidasi ke tabel §3, `expects` + payload wajib ikut |
+| `take(key, owner)` | baca **lalu hapus**, hanya untuk `to == owner` |
+| `pending()` / `pending_from(role)` | semua handoff yang belum diambil / yang ditinggalkan satu role |
+| `expired(now)` | lewat `deadline` dan masih ada |
+| `extend(key, s)` / `drop(key)` | dua tombol "nanti" dan "lupakan" pada card `handoff_check` |
+| `key_for(...)` | `handoff:<from>:<to>:<ekor subject>`, huruf kecil |
+
+`hermes_agents/orchestrator.py`:
+
+| Fungsi | Arti |
+| --- | --- |
+| `build_orchestrator_graph(handlers=None)` | node per role; role tanpa agent = node `skipped`, bukan sukses palsu |
+| `OrchestratorGraph.invoke(role, data)` | jalankan node lalu ikuti handoff-nya (`MAX_HOPS = 4`) |
+| `follow_chain(role)` | hanya mengikuti handoff yang sudah ditinggalkan `role` |
+| `run_orchestrator(trigger, data)` | entry berbasis trigger (validasi lewat `route_trigger`) |
+| `escalate_to_human(payload)` | node Orchestrator: catat `escalation:<subject>`, **tidak** membuka card |
+| `graph_summary()` | `{nodes, max_hops, handoffs}` untuk observasi |
+
+`triggers.run_trigger` memanggil `follow_handoffs(role)` setelah kerja agent selesai, jadi rantai
+berjalan pada trigger yang sama — bukan menunggu job yang belum ada. Job `handoff_check` hanya
+menagih handoff yang **tidak pernah** diambil.

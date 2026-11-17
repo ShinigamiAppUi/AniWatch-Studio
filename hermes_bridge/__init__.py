@@ -9,6 +9,6 @@ agent; `httpx` is for the calls to the office server. `env.py` is the one
 `.env` loader, called by an entry point (never at import time).
 """
 
-__all__ = ['bridge', 'env', 'queue', 'shared_context', 'db', 'smoke']
+__all__ = ['bridge', 'env', 'handoff', 'queue', 'shared_context', 'db', 'smoke']
 
 __version__ = '0.5.0'

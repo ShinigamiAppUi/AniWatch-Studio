@@ -213,7 +213,7 @@ def run_trigger(trigger: str, data: object = None, source: str = 'webhook') -> d
         log.warning('trigger=%s: OFFICE_TOKEN kosong - kerja tetap jalan, tanpa karakter di kantor', trigger)
         work = _run_work(trigger, data, None)
         return {'trigger': trigger, 'role': role, 'source': source, 'office': False,
-                'agents': [], 'work': work}
+                'agents': [], 'work': work, 'chain': _follow(role)}
 
     agents: list[str] = []
     work: dict | None = None
@@ -231,8 +231,9 @@ def run_trigger(trigger: str, data: object = None, source: str = 'webhook') -> d
         # The tool that does the work lives in hermes_agents; until W6-W9 the
         # character is the whole record for the triggers that have none
         work = _run_work(trigger, data, _RoleCharacter(agent))
+        chain = _follow(role)
         bridge.agent_done(agent, _work_line(trigger, source, work))
-        bridge.agent_done(orchestrator, f'{trigger} -> {role}')
+        bridge.agent_done(orchestrator, f'{trigger} -> {role}' + (f' -> {chain[-1]["to"]}' if chain else ''))
     except Exception as err:  # noqa: BLE001 - a background trigger must not crash the sidecar
         log.warning('trigger=%s: kantor tidak bisa dihubungi: %s', trigger, err)
         if work is None:
@@ -241,7 +242,23 @@ def run_trigger(trigger: str, data: object = None, source: str = 'webhook') -> d
                 'agents': agents, 'work': work}
 
     return {'trigger': trigger, 'role': role, 'source': source, 'office': True,
-            'agents': agents, 'work': work}
+            'agents': agents, 'work': work, 'chain': chain}
+
+
+def _follow(role: str) -> list[dict]:
+    """W8: after the routed agent worked, carry on through the handoffs it left.
+
+    A handoff is a transition, so this runs immediately: Sales -> Marketing would
+    otherwise wait for a job that does not exist. Roles whose agent is not built
+    yet stop the chain with `skipped` (see `hermes_agents/orchestrator.py`).
+    """
+    try:
+        from hermes_agents.orchestrator import follow_handoffs
+
+        return follow_handoffs(role)
+    except Exception as err:  # noqa: BLE001 - a broken chain must not fail the trigger
+        log.warning('trigger: rantai handoff dari %s gagal: %s', role, err)
+        return []
 
 
 def _work_line(trigger: str, source: str, work: dict | None) -> str:
