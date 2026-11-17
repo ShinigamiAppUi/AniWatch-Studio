@@ -1,5 +1,35 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 4.3 — 17 Nov 2026 (retry surat selamat datang)
+
+### Ditambah
+
+- `hermes_agents/marketing.py` `retry_welcome()`: mengirim ulang surat selamat datang yang percobaan
+  pertamanya gagal (`sent: false`). Sumber kebenarannya catatan `campaign:<lead>`; jeda 15 → 30 →
+  60 menit (`WELCOME_RETRY_S`), maksimal `MAX_WELCOME_ATTEMPTS = 4` percobaan. Fungsi ini **hanya**
+  menulis ulang catatan — tidak menulis handoff, jadi tiket onboarding tetap satu per lead.
+- Job scheduler `campaign_retry` (tiap 15 menit) → `webhook_server/jobs.retry_welcome_campaigns`.
+  Total job menjadi dua belas; `PENDING_JOBS` tetap kosong karena kerjanya ada.
+- Catatan `campaign:<lead>` menyimpan `name`, `last_at`, `sent_at`, `handoff`, `next_try_at`, dan
+  `last_error` supaya surat ulangan memakai isi yang sama dan alasannya bisa dibaca.
+
+### Diubah
+
+- Konversi kedua untuk lead yang suratnya belum terkirim menjawab `duplicate` + `retry_at` (bukan
+  mengirim langsung): burst konversi tidak boleh menjadi burst email. Pengiriman ulang tetap milik
+  job, dengan backoff.
+- Selfcheck: **213 PASS / 0 FAIL** (3 cek retry: menunggu backoff, mengirim tanpa tiket kedua,
+  tidak mengulang surat yang sudah keluar; cek jumlah job scheduler jadi 12).
+- SCHEDULER.md §2 (baris + catatan + hitungan), AGENTS §4.1 Marketing, DB-SCHEMA §11, PLAN W8/W9,
+  RELEASES, DOCS-PLAN disinkronkan.
+
+### Batas
+
+- Retry tetap butuh `SMTP_HOST`; tanpa itu ia berhenti setelah empat percobaan dengan `sent: false`
+  dan alasan `SMTP belum dikonfigurasi`, bukan mengklaim terkirim.
+
+---
+
 ## Rev 4.2 — 17 Nov 2026 (`/leads` sebagai pipeline)
 
 ### Diubah

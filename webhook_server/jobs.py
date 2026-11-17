@@ -229,6 +229,23 @@ def run_marketing_report(now: float | None = None) -> dict:
     return result
 
 
+def retry_welcome_campaigns(now: float | None = None, transport=None) -> dict:
+    """Every 15 minutes: resend welcome letters a failed attempt left behind.
+
+    Internal job like the other housekeeping ones: no character, no trigger, and
+    nothing new opened downstream - `marketing.retry_welcome` only rewrites the
+    `campaign:*` record it read, so Support's ticket count cannot move.
+    """
+    from hermes_agents import marketing
+
+    result = marketing.retry_welcome(now=now, transport=transport)
+    if result['sent'] or result['failed'] or result['gave_up']:
+        log.info('campaign_retry: %d terkirim, %d gagal, %d menunggu, %d menyerah',
+                 len(result['sent']), len(result['failed']), result['waiting'],
+                 len(result['gave_up']))
+    return result
+
+
 def run_cache_warmer(now: float | None = None) -> dict:
     """Daily 17.00: warm the CDN for the newest live episodes (W6).
 

@@ -24,7 +24,7 @@ jejak.
 | [DECISIONS.md](DECISIONS.md) | 🟠 Penting | 12 ADR | ✅ |
 | [CEO-GUIDE.md](CEO-GUIDE.md) | 🟠 Penting | workflow CEO | ✅ |
 | [AGENT-HANDOFFS.md](AGENT-HANDOFFS.md) | 🟠 Penting | protocol + SharedContext | ✅ |
-| [SCHEDULER.md](SCHEDULER.md) | 🟡 Opsional | 11 job APScheduler | ✅ |
+| [SCHEDULER.md](SCHEDULER.md) | 🟡 Opsional | 12 job APScheduler | ✅ |
 | [SECURITY.md](SECURITY.md) | 🟡 Opsional | security model | ✅ |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | 🟡 Opsional | setup & gejala | ✅ |
 | [CHANGELOG.md](CHANGELOG.md) | 🟡 Opsional | Rev1 → Rev3.1 | ✅ |

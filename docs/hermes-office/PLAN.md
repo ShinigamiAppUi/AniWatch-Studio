@@ -84,7 +84,7 @@ mengulang, QC dua kali → `failed` + handoff). Tanpa `ffmpeg`, jalankan dengan
 
 - FastAPI sidecar `127.0.0.1:8765`
 - `SUPPORTED_TRIGGERS` + validasi secret; semua trigger lewat Orchestrator
-- APScheduler: 11 job (SCHEDULER.md) — 7 inti, termasuk `cleanup_shared_context`; sisanya sweep approval, handoff check, publish embargo, dan backup
+- APScheduler: 12 job (SCHEDULER.md) — 7 inti, termasuk `cleanup_shared_context`; sisanya sweep approval, handoff check, publish embargo, backup, dan `campaign_retry` (W8 sisa)
 
 **Deliverable:** trigger dari luar (curl) memunculkan Orchestrator lalu agent yang tepat.
 
@@ -230,12 +230,15 @@ lulus.
   handoff) + `MarketingAgent.onboard_lead()` (surat selamat datang, `campaign:<lead>`, handoff ke
   Support) + `support.receive_handoff()` (tiket onboarding / `brief:<lead>`). Trigger `new_lead`,
   `form_submit`, dan `deal_stage_change` kini menjalankan kerja, bukan hanya menggambar karakter.
-  Selfcheck §14 (15 cek): rantai Sales → Marketing → Support berjalan pada agent sungguhan,
+  Surat yang gagal dikirim ulang oleh job `campaign_retry` (`retry_welcome`, jeda 15 → 30 → 60
+  menit, maks 4 percobaan) yang hanya menulis ulang `campaign:<lead>` — tanpa handoff kedua, jadi
+  tiket onboarding tetap satu per lead.
+  Selfcheck §14 (18 cek): rantai Sales → Marketing → Support berjalan pada agent sungguhan,
   `handoff:*` kosong setelahnya, dan tiap batasnya dinyatakan (SMTP kosong → surat dilewati dengan
-  alasan, kalender tidak ada, CRM = SharedContext).
+  alasan, kalender tidak ada, CRM = SharedContext), termasuk retry yang tidak menggandakan tiket.
 
-**Status W8 (lanjutan):** selesai. Total selfcheck **208 PASS / 0 FAIL** — 193 sebelum bagian ini,
-15 cek baru untuk Sales/Marketing. Yang **tidak** dipalsukan: `HUBSPOT_API_KEY` tidak dibaca (CRM
+**Status W8 (lanjutan):** selesai. Total selfcheck **213 PASS / 0 FAIL** — 193 sebelum bagian ini,
+20 cek baru untuk Sales/Marketing (termasuk tiga cek retry dan satu cek jumlah job scheduler). Yang **tidak** dipalsukan: `HUBSPOT_API_KEY` tidak dibaca (CRM
 adalah `lead:*` di SharedContext dan hasilnya menyebut `backend: shared_context`), `GOOGLE_*` tidak
 dipakai (meeting hanya ada sebagai handoff + `brief:<lead>`), dan surat tanpa `SMTP_HOST` pulang
 sebagai `sent: false` beserta alasannya — lead tetap `qualified`, suratnya yang tidak terkirim.
@@ -272,8 +275,9 @@ schedule yang belum live.
   `security_incidents`, `/unban` menambah baris. `agent_working` hanya saat ada pelanggaran.
 - [x] `/revenue`, `/payments`, `/subscriptions`, `/refunds`, `/chargeback`, `/security`,
   `/takedown` didaftarkan di `webhook_server/commands.py` + relay chat.
-- [x] Tidak ada job scheduler baru: kesebelas job SCHEDULER.md §2 sudah terdaftar sejak W6, dan W9
-  bekerja dari event (webhook) serta command, bukan dari putaran berkala.
+- [x] W9 tidak menambah job scheduler: job SCHEDULER.md §2 sudah terdaftar sejak W6, dan W9
+  bekerja dari event (webhook) serta command, bukan dari putaran berkala. (Satu job tambahan,
+  `campaign_retry`, datang dari W8 sisa — bukan dari W9.)
 
 ### W10 — Dashboard + polish
 

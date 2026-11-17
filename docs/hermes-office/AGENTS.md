@@ -241,6 +241,10 @@ konten di luar episode.
 setelah form-nya sudah qualified) menjawab `duplicate` dan tidak membuka tiket onboarding kedua.
 Tanpa `SMTP_HOST` suratnya `sent: false` dengan alasan yang tersimpan di `campaign:<lead>`; Support
 tetap menerima handoff-nya, karena follow-up manual justru yang dibutuhkan saat surat gagal.
+Surat yang gagal tidak hilang: job `campaign_retry` (tiap 15 menit) mengirim ulang dari catatan yang
+sama dengan jeda 15 → 30 → 60 menit, maksimal empat percobaan. Retry hanya menulis ulang
+`campaign:<lead>` — tidak ada handoff kedua, jadi tiket onboarding tetap satu per lead; sesudah
+empat percobaan catatan berhenti di `sent: false` beserta error terakhir untuk dilihat manusia.
 
 #### ⚙️ Ops — Generic
 

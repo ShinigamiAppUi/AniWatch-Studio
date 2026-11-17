@@ -97,8 +97,9 @@ Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
 > W10 ditutup (Rev 4.0): 13 command terakhir, gauge SLA dari `first_response_at`, dan `/biz` yang
 > membaca `GET /biz-metrics` milik kantor. W8 ditutup (Rev 4.1): agent Sales + Marketing, sehingga
 > `new_lead`, `form_submit`, dan `deal_stage_change` menjalankan kerja dan meneruskan rantai ke
-> Support. Tag tetap menunjuk commit rilis pertama; catatan lengkapnya di
-> [CHANGELOG.md](CHANGELOG.md) Rev 3.5–4.1.
+> Support. Rev 4.3 menambahkan `campaign_retry`: surat selamat datang yang gagal dikirim ulang
+> dengan backoff, tanpa tiket onboarding kedua. Tag tetap menunjuk commit rilis pertama; catatan
+> lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5–4.3.
 >
 > **Masih belum ada:** tidak ada penjualan per item, jadi `/topselling` tidak punya ranking; belum
 > ada endpoint purge CDN; tidak ada integrasi CRM/Google Calendar (Sales menulis SharedContext dan

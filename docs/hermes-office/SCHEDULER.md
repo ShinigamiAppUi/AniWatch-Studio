@@ -36,6 +36,7 @@ Express secara langsung — kantor hanya menerima event lewat bridge.
 | `shared_context_cleanup` | tiap hari 03.00 | `cleanup_shared_context` (24 jam) | tidak | 60 dtk |
 | `approval_sweep` | tiap jam | `sweep_approvals` (TTL 24 jam) | tidak | 30 dtk |
 | `handoff_check` | tiap 15 menit | `check_handoffs` — handoff lewat deadline | **ya** (eskalasi) | 60 dtk |
+| `campaign_retry` | tiap 15 menit | `retry_welcome_campaigns` — surat selamat datang yang gagal terkirim | tidak | 60 dtk |
 | `db_backup` | tiap hari 02.00 | `backup_databases` (DB-SCHEMA.md §13) | tidak | 300 dtk |
 
 Catatan per job:
@@ -53,11 +54,17 @@ Catatan per job:
   `run_orchestrator("escalate", {...})`; `escalate` bukan trigger webhook — hanya internal.
 - **`approval_sweep`** membuang keputusan approval yang tidak pernah diambil (TTL 24 jam), supaya
   store di memori tidak tumbuh. Ini bukan pengganti timeout agent: agent tetap timeout sendiri.
+- **`campaign_retry`** hanya menyentuh catatan `campaign:*` yang `sent: false`. Ia mengirim ulang
+  suratnya, **tidak** menulis handoff, jadi Support tidak pernah menerima tiket onboarding kedua
+  untuk pelanggan yang sama. Jeda antar-percobaan 15 → 30 → 60 menit (`WELCOME_RETRY_S`), maksimal
+  empat percobaan termasuk yang pertama; sesudahnya catatan tetap `sent: false` dengan error
+  terakhir — itu masalah manusia, bukan loop. Tanpa `SMTP_HOST` job ini akan mencoba tiga kali lalu
+  berhenti, bukan mengirim ribuan baris ke log.
 
 ### Status implementasi (W4 → W6)
 
-Sebelas job di §2 semuanya terdaftar sejak W6. Tiga yang terakhir menunggu agent growth, dan
-sekarang kerjanya ada di `webhook_server/jobs.py`:
+Sebelas job W6 di §2 terdaftar sejak W6; `campaign_retry` menyusul di W8 sisa (dua belas). Tiga
+yang terakhir menunggu agent growth, dan sekarang kerjanya ada di `webhook_server/jobs.py`:
 
 | id | Fungsi | Catatan |
 | --- | --- | --- |
@@ -72,11 +79,12 @@ sekarang kerjanya ada di `webhook_server/jobs.py`:
 | `weekly_report` | `run_marketing_report` | Senin 09.00; `run_trigger('weekly_analytics')` → Orchestrator → Marketing; menulis `media/published/reports/weekly-<ISO week>.md` |
 | `cache_warmer` | `run_cache_warmer` | tiap hari 17.00; episode live terbaru di-`GET` dari `CDN_BASE_URL`; tanpa CDN → `warmed: 0` + alasan |
 | `recommendation_batch` | `run_recommendation_batch` | Minggu 22.00; co-view dari `ANALYTICS_FEED`, ditulis ke `RECOMMENDATION_DB` (tabel `recommendations`) atau `media/published/recommendations.jsonl` |
+| `campaign_retry` | `retry_welcome_campaigns` → `MarketingAgent.retry_welcome` | tiap 15 menit (W8 sisa); hanya `campaign:*` dengan `sent: false`, tidak menulis handoff — tiket onboarding tetap satu per lead |
 
 W9 tidak menambah job: PaymentAgent bekerja dari `POST /webhook/payment`, DMCA dari `/takedown`, dan
 SecOps dari `SECURITY_EVENT_FEED` saat dipanggil — bukan dari putaran scheduler. Memasang loop
-detik untuk SecOps justru akan membanjiri kantor (PLAN.md §Risiko), jadi kesebelas job di §2 tetap
-kesebelas.
+detik untuk SecOps justru akan membanjiri kantor (PLAN.md §Risiko). Satu-satunya job tambahan
+sesudah W6 adalah `campaign_retry` dari W8 sisa; totalnya dua belas, bukan tigabelas.
 
 W10 juga tidak menambah job. Yang disebut W10 sudah aktif tanpa perubahan: `cache_warmer` 17.00
 (W6), `weekly_report` Senin 09.00 lewat Orchestrator (W6), `db_backup` 02.00 (W4), dan retensi

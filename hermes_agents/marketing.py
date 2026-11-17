@@ -14,6 +14,13 @@ Two jobs, both from AGENTS.md §4.1:
   uses), one campaign record in `campaign:<lead>`, then a handoff to Support for
   the follow-up. A second conversion for the same lead does not send a second
   letter; the record says what happened the first time.
+- `retry_welcome()` — the other half of that promise. A letter whose first
+  attempt did not leave (no `SMTP_HOST`, a dead relay) is retried on a widening
+  backoff by the `campaign_retry` job. The retry re-reads the campaign record and
+  sends only the letter: it never writes a handoff, so Support never gets a
+  second onboarding ticket for the same customer. After
+  `MAX_WELCOME_ATTEMPTS` the record stays `sent: False` with its last error, which
+  is a person's problem instead of an infinite loop.
 
 Neither job invents numbers or sends. Without `SMTP_HOST` the welcome letter is
 `sent: False` with the reason in the campaign record, and the lead stays
@@ -38,6 +45,25 @@ REPORT_DIR = 'reports'
 CAMPAIGN_PREFIX = 'campaign:'
 
 WELCOME_SUBJECT = 'Selamat datang di AniWatch'
+
+#: First try included: one letter, then three retries before a person looks
+MAX_WELCOME_ATTEMPTS = 4
+
+#: Wait after the first attempt, doubled per attempt (15m, 30m, 60m). A dead
+#: relay is not fixed in seconds, and a retry storm is how domains get blocked.
+WELCOME_RETRY_S = 900.0
+
+
+def _retry_delay(attempts: int) -> float:
+    """How long after attempt `attempts` the next one is allowed."""
+    return WELCOME_RETRY_S * (2 ** max(0, int(attempts) - 1))
+
+
+def _next_try(record: dict) -> float | None:
+    """When this letter may be tried again; None when it is done being tried."""
+    if record.get('sent') or int(record.get('attempts') or 0) >= MAX_WELCOME_ATTEMPTS:
+        return None
+    return float(record.get('last_at') or record.get('at') or 0) + _retry_delay(int(record.get('attempts') or 0))
 
 
 def week_label(now: float) -> str:
@@ -175,9 +201,12 @@ def onboard_lead(payload: object, *, now: float | None = None, transport=None) -
     # onboarding ticket. The record still says whether that attempt left.
     if isinstance(existing, dict) and int(existing.get('attempts') or 0) >= 1:
         log.info('marketing: kampanye %s sudah dicoba - tidak diulang', lead_id)
+        # An unsent letter is not re-mailed here: the `campaign_retry` job owns
+        # the backoff, so a burst of conversions cannot become a burst of mail.
         return {'action': 'campaign_sent' if existing.get('sent') else 'welcome_skipped',
                 'lead': lead_id, 'duplicate': True, 'sent': bool(existing.get('sent')),
-                'sent_at': existing.get('at'), 'handoff': None,
+                'sent_at': existing.get('sent_at') or existing.get('at'),
+                'retry_at': _next_try(existing), 'handoff': None,
                 'reason': 'surat selamat datang untuk lead ini sudah dicoba sebelumnya'}
 
     plan = str(data.get('plan') or 'free')
@@ -188,11 +217,6 @@ def onboard_lead(payload: object, *, now: float | None = None, transport=None) -
     sent = bool(result.get('sent'))
     if sent:
         _metric({'emails_sent': 1})
-    store.context().set(key, {
-        'lead': lead_id, 'email': email, 'plan': plan, 'channel': channel,
-        'sent': sent, 'reason': result.get('error'), 'at': at,
-        'outbox': result.get('outbox'), 'attempts': 1,
-    }, 'Marketing')
 
     handoff_key = None
     handoff_reason = None
@@ -205,11 +229,78 @@ def onboard_lead(payload: object, *, now: float | None = None, transport=None) -
     except (ValueError, handoff.UnknownHandoff) as err:
         handoff_reason = f'handoff tidak ditulis: {err}'
         log.warning('marketing: %s', handoff_reason)
+
+    record = {
+        'lead': lead_id, 'name': str(data.get('name') or '')[:80], 'email': email,
+        'plan': plan, 'channel': channel, 'sent': sent, 'reason': result.get('error'),
+        'at': at, 'last_at': at, 'outbox': result.get('outbox'), 'attempts': 1,
+        'sent_at': at if sent else None, 'handoff': handoff_key,
+    }
+    record['next_try_at'] = _next_try(record)
+    store.context().set(key, record, 'Marketing')
     log.info('marketing: kampanye %s (terkirim=%s) -> Support', lead_id, sent)
     return {'action': 'welcome_sent' if sent else 'welcome_skipped', 'lead': lead_id,
             'sent': sent, 'reason': result.get('error'), 'plan': plan, 'channel': channel,
             'handoff': handoff_key, 'handoff_reason': handoff_reason,
             'metric': {'emails_sent': 1} if sent else None}
+
+
+def retry_welcome(*, now: float | None = None, transport=None) -> dict:
+    """Resend welcome letters whose earlier attempt did not leave.
+
+    The campaign record is the source of truth and the only thing written back:
+    no handoff, no ticket, no second campaign. A record that already went out or
+    used up `MAX_WELCOME_ATTEMPTS` is left alone, and the result says which
+    records are still waiting, so a quiet run is distinguishable from a broken
+    one.
+    """
+    from . import mailer
+
+    at = time.time() if now is None else float(now)
+    records = store.context().find(CAMPAIGN_PREFIX)
+    sent: list[dict] = []
+    failed: list[dict] = []
+    waiting = 0
+    gave_up: list[str] = []
+
+    for key, value in sorted(records.items()):
+        record = value if isinstance(value, dict) else {}
+        if record.get('sent'):
+            continue
+        tries = int(record.get('attempts') or 0)
+        if tries >= MAX_WELCOME_ATTEMPTS:
+            gave_up.append(key)
+            continue
+        due = float(record.get('last_at') or record.get('at') or 0) + _retry_delay(tries)
+        if at < due:
+            waiting += 1
+            continue
+
+        lead_id = str(record.get('lead') or key.split(':', 1)[-1])
+        result = mailer.send(record.get('email') or '', WELCOME_SUBJECT,
+                             welcome_body(record), transport=transport, now=at)
+        left = bool(result.get('sent'))
+        updated = {
+            **record, 'sent': left, 'reason': result.get('error'),
+            'last_error': result.get('error') or record.get('last_error'),
+            'last_at': at, 'attempts': tries + 1,
+            'outbox': result.get('outbox') or record.get('outbox'),
+            'sent_at': at if left else None,
+        }
+        updated['next_try_at'] = _next_try(updated)
+        store.context().set(key, updated, 'Marketing')
+        if left:
+            _metric({'emails_sent': 1})
+            sent.append({'lead': lead_id, 'email': record.get('email'),
+                         'attempts': tries + 1})
+            log.info('marketing: surat selamat datang %s terkirim pada percobaan %d',
+                     lead_id, tries + 1)
+        else:
+            failed.append({'lead': lead_id, 'error': result.get('error'),
+                           'attempts': tries + 1})
+
+    return {'checked': len(records), 'sent': sent, 'failed': failed,
+            'waiting': waiting, 'gave_up': gave_up}
 
 
 def handle_trigger(payload: object, char: Any = None) -> dict:

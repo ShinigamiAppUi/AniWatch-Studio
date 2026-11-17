@@ -298,13 +298,13 @@ def main() -> int:
     sched1 = start_scheduler()
     sched2 = start_scheduler()
     ids = sorted(job.id for job in sched1.get_jobs())
-    check('w6: the scheduler registers all 11 jobs SCHEDULER.md lists',
-          ids == ['approval_sweep', 'cache_warmer', 'db_backup', 'email_check', 'episode_embargo',
-                  'handoff_check', 'ops_check', 'recommendation_batch', 'shared_context_cleanup',
-                  'sla_check', 'weekly_report'], str(ids))
-    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 11)
+    check('w6: the scheduler registers all 12 jobs SCHEDULER.md lists',
+          ids == ['approval_sweep', 'cache_warmer', 'campaign_retry', 'db_backup', 'email_check',
+                  'episode_embargo', 'handoff_check', 'ops_check', 'recommendation_batch',
+                  'shared_context_cleanup', 'sla_check', 'weekly_report'], str(ids))
+    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 12)
     check('w4: /health can list the running jobs',
-          len(registered_jobs()) == 11 and pending_jobs() == [])
+          len(registered_jobs()) == 12 and pending_jobs() == [])
     check('w6: no job is parked in PENDING_JOBS now that the growth agents exist',
           PENDING_JOBS == {})
     shutdown_scheduler()
@@ -1421,6 +1421,30 @@ def main() -> int:
           str(campaign)[:160])
     check('w8: the chain consumed both handoffs',
           ho.pending(context=ctx) == {}, str(list(ho.pending(context=ctx))))
+
+    retry_box = _Mailbox()
+    # The campaign was recorded at wall-clock time inside the Orchestrator, so the
+    # backoff window is measured from that stamp, not from this script's `now`.
+    first_at = float((ctx.get('campaign:sc-lead-1') or {}).get('last_at') or 0)
+    early = marketing.retry_welcome(now=first_at + 1, transport=retry_box)
+    check('w8: a failed welcome letter waits out its backoff before a retry',
+          early['sent'] == [] and early['waiting'] >= 1 and retry_box.sent == []
+          and (ctx.get('campaign:sc-lead-1') or {}).get('attempts') == 1, str(early))
+    retried_at = first_at + marketing.WELCOME_RETRY_S + 1
+    retried = marketing.retry_welcome(now=retried_at, transport=retry_box)
+    retried_record = ctx.get('campaign:sc-lead-1') or {}
+    rina_tickets = con.execute(
+        "SELECT COUNT(*) FROM tickets WHERE user_id = 'rina@studio.co.id'").fetchone()[0]
+    check('w8: a retry sends the letter and opens no second onboarding ticket',
+          [row['lead'] for row in retried['sent']] == ['sc-lead-1']
+          and len(retry_box.sent) == 1 and retried_record.get('sent') is True
+          and retried_record.get('attempts') == 2 and retried_record.get('sent_at') == retried_at
+          and ho.pending(context=ctx) == {} and rina_tickets == 1,
+          f'{retried} {retried_record} tickets={rina_tickets}')
+    again = marketing.retry_welcome(now=retried_at + 10 * marketing.WELCOME_RETRY_S,
+                                    transport=retry_box)
+    check('w8: a letter that already left is never retried',
+          again['sent'] == [] and again['waiting'] == 0 and len(retry_box.sent) == 1, str(again))
 
     meeting = sales_mod.handle_trigger(
         'deal_stage_change',

@@ -11,11 +11,11 @@ Follows SCHEDULER.md §1 and §3:
   twenty-four times.
 - one job raising never kills the scheduler (`_guard`).
 
-All 11 jobs in SCHEDULER.md §2 are registered since W6: the last three
-(`weekly_report`, `cache_warmer`, `recommendation_batch`) waited for the growth
-agents, and now have their work in `jobs.py`. `PENDING_JOBS` stays as the place
-to name a job whose work is not built yet - a job that runs and does nothing
-would look like a working system - and it is empty while they all are.
+The 11 jobs SCHEDULER.md §2 listed since W6 had their work in `jobs.py`; W8 adds
+a twelfth, `campaign_retry`, for welcome letters whose first send failed.
+`PENDING_JOBS` stays as the place to name a job whose work is not built yet - a
+job that runs and does nothing would look like a working system - and it is
+empty while they all are.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 COMMON = dict(max_instances=1, coalesce=True, misfire_grace_time=300)
 
 #: `id` -> why it is not registered yet. Printed by `pending_jobs()` and at start.
-#: Empty since W6: every job in SCHEDULER.md §2 has its work in `jobs.py`.
+#: Empty while every job in SCHEDULER.md §2 has its work in `jobs.py`.
 PENDING_JOBS: dict[str, str] = {}
 
 _sched: BackgroundScheduler | None = None
@@ -86,6 +86,8 @@ def start_scheduler() -> BackgroundScheduler:
                       id='ops_check', **COMMON)
         sched.add_job(_guard(jobs.check_handoffs), IntervalTrigger(minutes=15),
                       id='handoff_check', **COMMON)
+        sched.add_job(_guard(jobs.retry_welcome_campaigns), IntervalTrigger(minutes=15),
+                      id='campaign_retry', **COMMON)
         sched.add_job(_guard(jobs.backup_databases), 'cron', hour=2,
                       id='db_backup', **COMMON)
         sched.add_job(_guard(jobs.run_marketing_report), 'cron', day_of_week='mon', hour=9,

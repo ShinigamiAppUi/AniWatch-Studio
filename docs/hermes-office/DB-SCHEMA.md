@@ -397,12 +397,18 @@ Key yang dipakai (konvensi, bukan constraint):
 | Pola key | Penulis | Isi |
 | --- | --- | --- |
 | `lead:<id>` | Sales | skor + alasannya, nama, email, stage, sumber |
-| `campaign:<lead>` | Marketing | satu kali percobaan surat selamat datang: `sent`, alasan, plan, channel |
+| `campaign:<lead>` | Marketing | satu kampanye onboarding per lead: `sent`, `sent_at`, `attempts` (maks 4), `next_try_at`, `reason`/`last_error`, plan, channel, nama, `handoff` |
 | `brief:<lead>` | Support | brief sebelum meeting: `when`, `timezone`, `needs` |
 | `ticket:<id>` | Support | tiket + history percakapan |
 | `episode:<id>` | Scraper → QC | path, status pipeline, source alternatif |
 | `report:<id>` | UserReportAgent | kategori, episode, aksi |
 | `handoff:<from>:<to>:<id>` | siapa pun | payload handoff (AGENT-HANDOFFS.md) |
+
+`campaign:*` punya dua penulis dan satu arah: `onboard_lead()` menulis percobaan pertama beserta
+handoff ke Support, `retry_welcome()` hanya menulis ulang catatan yang sama saat mengirim ulang
+suratnya (tanpa handoff). `handoff` di catatan itu adalah kunci handoff pertama, dan tidak pernah
+diganti — itulah yang membuat jumlah tiket onboarding per lead tetap satu walau suratnya dikirim
+ulang tiga kali.
 
 Cleanup: `DELETE FROM context WHERE ts < ?` (default 24 jam), dijadwalkan 03.00.
 
