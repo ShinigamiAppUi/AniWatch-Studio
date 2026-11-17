@@ -587,8 +587,8 @@ selfcheck W10 memeriksanya.
 
 | Command W10 | Output | Sumber data |
 | --- | --- | --- |
-| `/biz` | counter hari ini, SLA, siapa yang bekerja. **Butuh kantor berjalan**: tanpa `GET /biz-metrics` jawabannya alasan, bukan angka | `GET /biz-metrics` (`chat.db`) |
-| `/leads` | pipeline per stage (**semua** `lead:*`, bukan hanya hari ini) + jumlah lead masuk hari ini + handoff ber-subject `lead:` yang belum diambil, dikelompokkan per rute `Sales→Marketing`. Tanpa lead: hari itu memang kosong | SharedContext `lead:*`, `handoff.pending()` (ditulis agent Sales/Marketing) |
+| `/biz` | counter hari ini, SLA, siapa yang bekerja, dan jumlah surat selamat datang yang menyerah. **Butuh kantor berjalan**: tanpa `GET /biz-metrics` jawabannya alasan, bukan angka (baris campaign tetap muncul) | `GET /biz-metrics` (`chat.db`), `campaign:*` di DB sidecar |
+| `/leads` | pipeline per stage (**semua** `lead:*`, bukan hanya hari ini) + jumlah lead masuk hari ini + handoff ber-subject `lead:` yang belum diambil, dikelompokkan per rute `Sales→Marketing` + lead yang surat selamat datangnya sudah menyerah. Tanpa lead: hari itu memang kosong | SharedContext `lead:*`, `handoff.pending()`, `campaign:*` (ditulis agent Sales/Marketing) |
 | `/tickets` | jumlah per status + 3 tiket terbuka terbaru | `tickets` |
 | `/sla` | compliance tiket selesai (7 hari), yang lewat deadline, rata-rata respons pertama + jumlah sampel | `tickets` |
 | `/topselling` | jumlah item live/dicabut. **Tidak ada ranking**: penjualan per item tidak tercatat | `premium_items`, `payment_events` |
@@ -605,6 +605,13 @@ selfcheck W10 memeriksanya.
 audit DMCA sebelum membatalkan. Dua command untuk satu efek hanya membuat audit punya dua bentuk.
 `/topselling` dan `/leads` adalah jawaban jujur tentang data yang belum ada, bukan laporan palsu:
 kantor hanya menampilkan angka yang bisa diperiksa di DB.
+
+Surat selamat datang yang sudah menyerah ikut ditampilkan: job `campaign_retry` berhenti setelah
+`MAX_WELCOME_ATTEMPTS = 4` dan meninggalkan catatan `campaign:<lead>` dengan `sent: false` +
+`last_error`. `/leads` menambahkan satu baris `⚠️ Surat selamat datang menyerah (N): <lead>` (dan
+field `campaigns_gave_up`), `/biz` menambahkan baris yang sama beserta `campaigns_gave_up`. Baris itu
+dibaca dari DB sidecar sendiri, jadi tetap muncul ketika kantor mati — kegagalan kirim tidak
+menunggu panel hidup untuk terlihat.
 
 Aturan respons: **satu pesan chat, maksimal 6 baris.** Command yang butuh daftar panjang
 mengirim ringkasan + "…dan N lainnya" (chat panel bukan dashboard). Detail lengkap tetap di

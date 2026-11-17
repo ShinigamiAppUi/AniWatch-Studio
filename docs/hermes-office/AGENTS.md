@@ -246,6 +246,11 @@ sama dengan jeda 15 → 30 → 60 menit, maksimal empat percobaan. Retry hanya m
 `campaign:<lead>` — tidak ada handoff kedua, jadi tiket onboarding tetap satu per lead; sesudah
 empat percobaan catatan berhenti di `sent: false` beserta error terakhir untuk dilihat manusia.
 
+Catatan yang berhenti itu tidak hanya ada bagi yang membuka SharedContext:
+`marketing.gave_up_campaigns()` membacanya, dan `/biz` serta `/leads` menyebut lead-nya di satu baris
+(`campaigns_gave_up` di respons). Baris itu berasal dari DB sidecar sendiri, jadi `/biz` tetap
+melaporkannya saat kantor mati.
+
 #### ⚙️ Ops — Generic
 
 **Key:** `Ops` · **Rumah:** Business Suite · **Tools:** `check_system`, `run_workflow`,

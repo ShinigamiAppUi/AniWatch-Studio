@@ -44,6 +44,13 @@ leads that came in today. Pending handoffs whose subject is a `lead:` are shown
 next to them, because "qualified but nobody picked it up" is the failure a
 pipeline view exists to catch.
 
+Both `/leads` and `/biz` also name the welcome letters that used up every retry
+(`marketing.gave_up_campaigns()`). `campaign_retry` stops after
+`MAX_WELCOME_ATTEMPTS` and leaves the record `sent: False`; without a reader that
+is a customer no one wrote to, visible only to whoever opens SharedContext. The
+count comes from the sidecar's own DB, so `/biz` can report it even when the
+office is closed.
+
 `/approve` calls `premium.decide`, which is the only writer out of
 `pending_approval`; the card's answer goes through the same function from
 `premium.request_approval`. That is what makes both doors end in the same status
@@ -329,6 +336,27 @@ def _takedown(args: list[str], now: float | None) -> dict:
                             f'audit: {result.get("id")}, {cdn}')}
 
 
+def _gave_up() -> list[dict]:
+    """Welcome letters Marketing retried until it ran out of attempts.
+
+    `campaign_retry` leaves such a record `sent: False` after
+    `MAX_WELCOME_ATTEMPTS`; reading it here is what turns a silent failure into
+    something the chat can show, without inventing a second counter.
+    """
+    from hermes_agents import marketing
+
+    return marketing.gave_up_campaigns()
+
+
+def _gave_up_line(gave_up: list[dict]) -> str:
+    """One chat line naming the leads whose welcome letter never left."""
+    if not gave_up:
+        return ''
+    leads = ', '.join(str(row.get('lead')) for row in gave_up[:3])
+    more = f' +{len(gave_up) - 3} lain' if len(gave_up) > 3 else ''
+    return f'⚠️ Surat selamat datang menyerah ({len(gave_up)}): {leads}{more}'
+
+
 def _biz(now: float | None) -> dict:
     """The office's own counters, read from `GET /biz-metrics`.
 
@@ -338,13 +366,19 @@ def _biz(now: float | None) -> dict:
     """
     from hermes_bridge import bridge
 
+    # The campaign backlog lives in the sidecar's own DB, so it is worth saying
+    # even when the office is closed - a dead relay does not wait for the panel.
+    gave_up = _gave_up()
+
     try:
         data = bridge.get_biz_metrics()
     except Exception as err:  # noqa: BLE001 - the chat gets the reason, not a 500
-        return {'handled': True, 'ok': False, 'reply': _reply(
-            '📊 /biz membaca GET /biz-metrics di kantor, dan kantor tidak menjawab.',
-            f'alasan: {str(err)[:160]}',
-            'Jalankan kantornya (npm start), lalu coba lagi.')}
+        return {'handled': True, 'ok': False, 'campaigns_gave_up': len(gave_up),
+                'reply': _reply(
+                    '📊 /biz membaca GET /biz-metrics di kantor, dan kantor tidak menjawab.',
+                    f'alasan: {str(err)[:160]}',
+                    'Jalankan kantornya (npm start), lalu coba lagi.',
+                    _gave_up_line(gave_up))}
 
     today = data.get('today') if isinstance(data.get('today'), dict) else {}
     sla = data.get('sla') if isinstance(data.get('sla'), dict) else {}
@@ -358,6 +392,7 @@ def _biz(now: float | None) -> dict:
     agents = [str(name) for name in (data.get('agents_active') or []) if str(name).strip()]
     return {
         'handled': True, 'ok': True, 'metrics': data, 'today': today, 'sla': sla,
+        'campaigns_gave_up': len(gave_up),
         'reply': _reply(
             f'📊 Hari ini: {n(today, "leads_qualified")} lead, {n(today, "emails_sent")} email, '
             f'{n(today, "tickets_resolved")} tiket selesai, {n(today, "tickets_pending")} terbuka',
@@ -367,6 +402,7 @@ def _biz(now: float | None) -> dict:
             f'{n(sla, "breach_count")} lewat deadline',
             '🧑‍💻 bekerja: ' + (', '.join(agents[:6]) if agents else '-'),
             f'🕒 update: {data.get("last_updated") or "-"}',
+            _gave_up_line(gave_up),
         ),
     }
 
@@ -395,6 +431,7 @@ def _leads(now: float | None) -> dict:
     ctx = store.context()
     everything = ctx.find('lead:')
     rows = ctx.recent('lead:', since=_day_start(at))
+    gave_up = _gave_up()
 
     pipeline: dict[str, int] = {stage: 0 for stage in LEAD_STAGES}
     for value in everything.values():
@@ -417,14 +454,15 @@ def _leads(now: float | None) -> dict:
 
     if not everything:
         return {'handled': True, 'ok': True, 'leads': [], 'pipeline': pipeline,
-                'handoffs': routes, 'waiting': sorted(waiting), 'insufficient':
+                'handoffs': routes, 'waiting': sorted(waiting),
+                'campaigns_gave_up': [row['lead'] for row in gave_up], 'insufficient':
                 'tidak ada key lead:*; agent Sales menulisnya lewat trigger '
                 'new_lead/form_submit/deal_stage_change',
                 'reply': _reply('📭 Belum ada lead.',
                                 'Key lead:* ditulis agent Sales dari trigger new_lead, '
                                 'form_submit, dan deal_stage_change.',
                                 'Kantor tidak mengarang lead untuk mengisi panel.',
-                                handoff_line)}
+                                _gave_up_line(gave_up), handoff_line)}
 
     filled = ', '.join(f'{stage} {n}' for stage, n in pipeline.items() if n)
     lines = [
@@ -438,11 +476,16 @@ def _leads(now: float | None) -> dict:
         score = value.get('score')
         grades = f', skor {float(score):.2f}' if isinstance(score, (int, float)) else ''
         lines.append(f'- {str(label)[:60]} ({stage}{grades}) oleh {row.get("owner") or "-"}')
+    # A letter nobody could deliver outranks the "and N more leads" note: the
+    # pipeline can wait one turn, a customer with no welcome mail cannot.
+    if gave_up:
+        lines.append(_gave_up_line(gave_up))
     lines.append(handoff_line)
-    if len(rows) > 2:
+    if len(rows) > 2 and len(lines) < MAX_LINES:
         lines.append(f'…dan {len(rows) - 2} lead lain hari ini')
     return {'handled': True, 'ok': True, 'leads': [row['key'] for row in rows],
             'pipeline': pipeline, 'handoffs': routes, 'waiting': sorted(waiting),
+            'campaigns_gave_up': [row['lead'] for row in gave_up],
             'reply': _reply(*lines)}
 
 

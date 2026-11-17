@@ -410,6 +410,11 @@ suratnya (tanpa handoff). `handoff` di catatan itu adalah kunci handoff pertama,
 diganti — itulah yang membuat jumlah tiket onboarding per lead tetap satu walau suratnya dikirim
 ulang tiga kali.
 
+Pembaca ketiga: `marketing.gave_up_campaigns()` (dipakai `/biz` dan `/leads`) menyaring catatan yang
+`sent` masih `false` dan `attempts` sudah mencapai `MAX_WELCOME_ATTEMPTS`. Itu satu-satunya cara
+surat yang habis percobaan terlihat di chat tanpa membuka DB — dan alasannya tidak diubah di sana,
+hanya dibaca.
+
 Cleanup: `DELETE FROM context WHERE ts < ?` (default 24 jam), dijadwalkan 03.00.
 
 ---

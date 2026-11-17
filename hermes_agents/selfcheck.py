@@ -1446,6 +1446,46 @@ def main() -> int:
     check('w8: a letter that already left is never retried',
           again['sent'] == [] and again['waiting'] == 0 and len(retry_box.sent) == 1, str(again))
 
+    # A letter the job eventually gives up on must still be readable. Four failed
+    # attempts on a dead relay, then the chat has to name the customer.
+    ctx.set('campaign:sc-gagal', {
+        'lead': 'sc-gagal', 'name': 'Sari', 'email': 'sari@toko.id', 'plan': 'premium',
+        'channel': 'web', 'sent': False, 'reason': 'SMTP belum dikonfigurasi',
+        'at': now, 'last_at': now, 'attempts': 1, 'sent_at': None,
+    }, 'Marketing')
+    dead_box = _Mailbox(error='relay mati')
+    at_dead = now
+    for _ in range(marketing.MAX_WELCOME_ATTEMPTS - 1):
+        at_dead += 8 * marketing.WELCOME_RETRY_S
+        marketing.retry_welcome(now=at_dead, transport=dead_box)
+    exhausted = marketing.retry_welcome(now=at_dead + 8 * marketing.WELCOME_RETRY_S,
+                                       transport=dead_box)
+    dead_record = ctx.get('campaign:sc-gagal') or {}
+    check('w8: a letter that used every attempt stops and keeps its last error',
+          'campaign:sc-gagal' in exhausted['gave_up']
+          and dead_record.get('sent') is False
+          and dead_record.get('attempts') == marketing.MAX_WELCOME_ATTEMPTS
+          and 'relay mati' in str(dead_record.get('last_error')),
+          f'{exhausted} {dead_record}'[:240])
+    gave_up_rows = marketing.gave_up_campaigns()
+    check('w8: the campaign Marketing gave up on is readable, with its error',
+          [row['lead'] for row in gave_up_rows] == ['sc-gagal']
+          and gave_up_rows[0]['attempts'] == marketing.MAX_WELCOME_ATTEMPTS
+          and 'relay mati' in str(gave_up_rows[0]['last_error']), str(gave_up_rows)[:200])
+    gave_up_leads = w7commands.handle_command('/leads', now=now)
+    check('w8: /leads names the lead whose welcome letter gave up',
+          'sc-gagal' in gave_up_leads.get('campaigns_gave_up', [])
+          and 'menyerah' in gave_up_leads.get('reply', '')
+          and len(gave_up_leads['reply'].splitlines()) <= w7commands.MAX_LINES,
+          str(gave_up_leads)[:240])
+    # /biz reads its counters over HTTP, but the campaign backlog is its own DB:
+    # the line has to be there whether or not the office answers.
+    gave_up_biz = w7commands.handle_command('/biz', now=now)
+    check('w8: /biz reports the same gave-up letters even without the office',
+          gave_up_biz.get('campaigns_gave_up') == 1
+          and 'menyerah' in gave_up_biz.get('reply', '')
+          and 'sc-gagal' in gave_up_biz.get('reply', ''), str(gave_up_biz)[:240])
+
     meeting = sales_mod.handle_trigger(
         'deal_stage_change',
         {'lead_id': 'sc-lead-1', 'stage': 'meeting', 'when': '2026-11-18T10:00:00+07:00',

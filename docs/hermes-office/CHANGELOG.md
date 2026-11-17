@@ -1,5 +1,33 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 4.4 — 17 Nov 2026 (surat yang menyerah terlihat di chat)
+
+### Ditambah
+
+- `hermes_agents/marketing.py` `gave_up_campaigns()`: membaca `campaign:*` yang `sent: false` dan
+  `attempts` sudah mencapai `MAX_WELCOME_ATTEMPTS`, mengembalikan `lead`, `email`, `attempts`,
+  `last_error`, dan `last_at`. Catatan tidak diubah — fungsi ini hanya membaca.
+- `webhook_server/commands.py`: satu baris `⚠️ Surat selamat datang menyerah (N): <lead>` di `/leads`
+  (field `campaigns_gave_up`) dan di `/biz` (field `campaigns_gave_up`). Baris itu dibaca dari DB
+  sidecar sendiri, sehingga `/biz` tetap melaporkannya saat `GET /biz-metrics` gagal.
+- Selfcheck: **217 PASS / 0 FAIL** (4 cek baru: surat berhenti setelah empat percobaan + error
+  terakhir tersimpan, `gave_up_campaigns()` mengembalikan lead yang tepat, `/leads` menyebut lead
+  itu dalam batas 6 baris, `/biz` menyebutnya tanpa kantor berjalan).
+
+### Diubah
+
+- `/leads` memprioritaskan baris campaign di atas catatan "…dan N lead lain hari ini" saat pesan
+  mencapai 6 baris; daftar lead hari ini tetap dua baris.
+- API-REFERENCE §6 (`/biz`, `/leads` + catatan), AGENTS §4.1 Marketing, DB-SCHEMA §11 disinkronkan.
+
+### Batas
+
+- Baris ini melaporkan kegagalan yang sudah berhenti, bukan yang masih menunggu backoff — yang
+  menunggu memang belum menjadi masalah manusia. Tidak ada tombol kirim ulang manual: setelah
+  empat percobaan, memperbaiki `SMTP_HOST` lalu menunggu konversi berikutnya adalah jalannya.
+
+---
+
 ## Rev 4.3 — 17 Nov 2026 (retry surat selamat datang)
 
 ### Ditambah

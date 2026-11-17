@@ -303,6 +303,31 @@ def retry_welcome(*, now: float | None = None, transport=None) -> dict:
             'waiting': waiting, 'gave_up': gave_up}
 
 
+def gave_up_campaigns() -> list[dict]:
+    """Welcome letters that used up every attempt and are now a person's problem.
+
+    The `campaign_retry` job stops at `MAX_WELCOME_ATTEMPTS` and leaves the record
+    `sent: False`; without a reader those failures only exist for whoever opens
+    SharedContext. `/biz` and `/leads` call this so a broken relay is visible in
+    the chat, next to the pipeline it affects.
+    """
+    records = store.context().find(CAMPAIGN_PREFIX)
+    out: list[dict] = []
+    for key, value in sorted(records.items()):
+        record = value if isinstance(value, dict) else {}
+        tries = int(record.get('attempts') or 0)
+        if record.get('sent') or tries < MAX_WELCOME_ATTEMPTS:
+            continue
+        out.append({
+            'lead': str(record.get('lead') or key.split(':', 1)[-1]),
+            'email': record.get('email'),
+            'attempts': tries,
+            'last_error': record.get('last_error') or record.get('reason'),
+            'last_at': record.get('last_at') or record.get('at'),
+        })
+    return out
+
+
 def handle_trigger(payload: object, char: Any = None) -> dict:
     """Entry point for `weekly_analytics` (fired by the `weekly_report` job)."""
     data = payload if isinstance(payload, dict) else {}
