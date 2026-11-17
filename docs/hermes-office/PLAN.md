@@ -74,6 +74,12 @@ panel chat (`src/bizApproval.ts`), tombolnya mengirim `approval_response` lewat 
 episode `live` setelah embargo, dan `cancel_schedule` mencegah publish (diuji dengan DMCA palsu
 sebelum embargo habis).
 
+**Status W3:** selesai di `agents/` (`pipeline.py`, `media.py`, `episode_scheduler.py`,
+`notifier.py`, `store.py`, `base.py`). Uji ulang tanpa kantor/network: `python -m agents.selfcheck`
+(22 cek: satu episode sampai `live`, duplikat ditolak, cancel tidak pernah publish, publish tidak
+mengulang, QC dua kali → `failed` + handoff). Tanpa `ffmpeg`, jalankan dengan
+`HERMES_ENCODER=copy`; `encode_mode` mencatatnya, jadi tidak ada baris yang mengaku di-transcode.
+
 ### W4 — Webhook + scheduler
 
 - FastAPI sidecar `127.0.0.1:8765`

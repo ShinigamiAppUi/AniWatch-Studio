@@ -85,6 +85,19 @@ set nilai acak panjang — jangan kosongkan, dan jangan matikan verifikasi.
 | `DEEPL_API_KEY` | TranslationAgent (kalau `deepl`) | guard: provider `deepl` tanpa key = error saat start agent |
 | `TRANSLATION_QA_THRESHOLD` | TranslationAgent | default `0.75`; di bawah ini → permission card |
 
+### 3a. Pipeline episode (W3) — dipakai `agents/`
+
+| Variabel | Wajib | Default | Arti |
+| --- | --- | --- | --- |
+| `HERMES_MEDIA_DIR` | tidak | `~/.hermes-office/media` | akar file: `incoming/`, `encoded/`, `subs/`, `published/` |
+| `HERMES_ENCODER` | tidak | `ffmpeg` | `ffmpeg` (encode 720p asli) atau `copy` (dev tanpa ffmpeg; dicatat `encode_mode: copy`) |
+| `HERMES_GLOSSARY` | tidak | `~/.hermes-office/glossary/id-en.json` | kamus `local` untuk TranslationAgent |
+| `TRANSLATION_MODEL` | tidak | `gpt-4o-mini` | model kalau `TRANSLATION_PROVIDER=openai` |
+| `OPENAI_API_KEY` | hanya kalau `openai` | — | key untuk provider `openai` |
+
+`TRANSLATION_PROVIDER` default di kode sekarang **`local`** (glossary), bukan `deepl`: tanpa key,
+`deepl`/`openai` gagal jelas (`MissingCredentials`), bukan diam-diam pindah provider.
+
 Prinsip: integrasi opsional **tidak** boleh menggagalkan agent lain. Yang hilang hanya tool terkait,
 dan itu harus terlihat sebagai `agent_error` yang jelas, bukan `except: pass`.
 
@@ -109,6 +122,12 @@ SIDECAR_URL=http://127.0.0.1:8765
 # ── Sidecar (WAJIB) ────────────────────────────────────────────────────────
 WEBHOOK_SECRET=
 MIDTRANS_SERVER_KEY=
+
+# ── Pipeline episode (W3) ──────────────────────────────────────────────────
+# HERMES_MEDIA_DIR=~/.hermes-office/media
+# HERMES_ENCODER=ffmpeg        # 'copy' hanya untuk dev tanpa ffmpeg
+# HERMES_GLOSSARY=~/.hermes-office/glossary/id-en.json
+# TRANSLATION_PROVIDER=local   # local | deepl | openai
 
 # ── Agent ──────────────────────────────────────────────────────────────────
 HERMES_MODEL=nous-hermes-2

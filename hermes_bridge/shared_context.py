@@ -69,12 +69,21 @@ class SharedContext:
         return json.loads(row['value']) if row else None
 
     def update(self, key: str, patch: dict, owner: str) -> Any:
-        """Merge `patch` into a dict value; a missing key starts from `{}`."""
-        with self._lock:
-            current = self.get(key)
+        """Merge `patch` into a dict value; a missing key starts from `{}`.
+
+        One lock, one connection: calling `get()` and `set()` here would take the
+        same non-reentrant lock twice and deadlock the caller.
+        """
+        with self._lock, self._connect() as con:
+            row = con.execute('SELECT value FROM context WHERE key = ?', (key,)).fetchone()
+            current = json.loads(row['value']) if row else None
             merged = {**(current if isinstance(current, dict) else {}), **patch}
-            self.set(key, merged, owner)
-            return merged
+            con.execute(
+                'INSERT INTO context (key, value, owner, ts) VALUES (?, ?, ?, ?) '
+                'ON CONFLICT(key) DO UPDATE SET value = excluded.value, owner = excluded.owner, ts = excluded.ts',
+                (key, json.dumps(merged, ensure_ascii=False), owner, time.time()),
+            )
+        return merged
 
     def delete(self, key: str) -> bool:
         with self._lock, self._connect() as con:

@@ -130,6 +130,7 @@ hermes-office/
 │   ├── biz-events.js             # ← BARU: ESM, /biz-metrics + forward approval
 │   └── chat-db.js                # base: ~/.agent-office/chat.db (0600)
 │
+├── agents/                       # ← BARU: 8 agent pipeline episode (W3)
 ├── hermes_bridge/                # ← BARU: Python bridge
 │   ├── bridge.py                 # event → Express, retry, DLQ
 │   ├── queue.py                  # dead-letter queue SQLite

@@ -271,6 +271,9 @@ Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityCh
 **Key:** `Metadata` · **Tools:** `fetch_mal`, `fetch_anilist`, `update_db`
 **Trigger:** setelah Scraper · **Output:** judul, synopsis, thumbnail, genre, rating
 **Handoff:** → Encoder
+**Implementasi W3:** `agents/media.derive_metadata()` memakai sidecar `<episode>.json`; kalau tidak
+ada, judul diturunkan dari slug nama file. `fetch_mal`/`fetch_anilist` **belum** dipanggil (butuh
+key), dan itu bukan fallback diam-diam: `metadata_source` mencatat `sidecar` atau `filename`.
 
 #### 🔄 Encoder
 
@@ -278,6 +281,10 @@ Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityCh
 **Trigger:** file baru dari Metadata · **Output:** 360p/720p/1080p + thumbnail di CDN
 **Handoff:** → Subtitle
 **Env:** `CDN_API_KEY`, `CDN_BASE_URL`
+**Implementasi W3:** 720p H.264/AAC lewat `ffmpeg` (default). Tanpa ffmpeg pakai
+`HERMES_ENCODER=copy`; hasilnya mencatat `encode_mode: copy`, jadi tidak ada episode yang mengaku
+di-transcode padahal hanya disalin. Upload CDN belum dipanggil (opsional, `CDN_BASE_URL` hanya
+dipakai Notifier untuk URL feed).
 
 #### 🌐 Subtitle
 
@@ -285,6 +292,8 @@ Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityCh
 **Trigger:** setelah Encoder · **Output:** subtitle tersinkron, encoding diperbaiki
 **Handoff:** → TranslationAgent
 **Batas:** hanya timing & encoding. Terjemahan bukan tugasnya.
+**Implementasi W3:** `.srt` dan `.ass` dibaca (`parse_subtitle`), isinya dinormalisasi ke UTF-8 dan
+ditulis sebagai `<episode>.id.srt`; baris `subtitle_tracks` dibuat dengan `status='ready'`.
 
 #### 🌏 TranslationAgent
 
@@ -306,6 +315,10 @@ Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityCh
 ```
 
 **Env:** `TRANSLATION_PROVIDER`, `DEEPL_API_KEY`, `TRANSLATION_QA_THRESHOLD`
+**Implementasi W3:** `local` = glossary (`HERMES_GLOSSARY`), dan skor QA =
+proporsi baris yang benar-benar berubah. Baris yang tidak ada di glossary dibiarkan apa adanya, jadi
+skor 0 berarti "tidak diterjemahkan", bukan "mirip". `deepl`/`openai` tanpa key gagal jelas
+(`MissingCredentials`).
 
 #### 🔍 QualityChecker
 
@@ -342,6 +355,9 @@ Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityCh
 **Key:** `Notifier` · **Tools:** `push_notif`, `update_rss`, `update_feed`
 **Trigger:** episode live · **Output:** subscriber dinotif, RSS/feed terupdate
 **Handoff:** → SocialMedia (`announce_episode`)
+**Implementasi W3:** selalu menulis `media/published/notifications.jsonl` + `feed.xml` (RSS 2.0).
+Discord/Telegram hanya diposting kalau `DISCORD_WEBHOOK_URL` / `TELEGRAM_*` diisi; kalau kosong,
+dilewati dan `notified_channels` mencatat channel yang benar-benar terkirim.
 
 #### ⚡ CacheWarmer
 
