@@ -40,8 +40,11 @@ Express secara langsung — kantor hanya menerima event lewat bridge.
 
 Catatan per job:
 
-- **`email_check`** memakai Gmail API; kalau kredensial kosong, job hanya log sekali per jam
-  (bukan tiap 5 menit) — hindari spam log.
+- **`email_check`** membaca kotak masuk lewat **IMAP stdlib** (`imaplib`, `hermes_agents/inbox.py`),
+  bukan Gmail API: `BODY.PEEK[]` supaya surat tidak hilang kalau proses mati di tengah jalan, UID
+  yang sudah jadi tiket dicatat di SharedContext (`inbox:seen`, maks 500). Pesan dengan header
+  `Auto-Submitted` selain `no` dilewati — tanpa itu Support menjawab dirinya sendiri. Kalau
+  `IMAP_HOST`/`IMAP_USER` kosong, job hanya log **sekali per jam** (bukan tiap 5 menit).
 - **`sla_check`** adalah satu-satunya job yang memunculkan permission card dari scheduler. Urutannya
   wajib: `agent_update` → `agent_waiting` → `wait_for_approval` **sekali** (fix Rev 3 #1).
 - **`episode_embargo`** memeriksa `episode_schedule` tiap menit: akurasi go-live ±1 menit. Publish
@@ -59,13 +62,14 @@ Didaftarkan sekarang, karena kerjaannya sudah ada di `webhook_server/jobs.py`:
 | --- | --- | --- |
 | `episode_embargo` | `run_episode_scheduler` | satu putaran `publish_due_episodes`, bukan `while True` |
 | `sla_check` | `sla_check` → `SupportAgent.check_sla_breaches` | tiap 5 menit; **satu** card untuk semua tiket telat, `wait_for_approval` sekali |
+| `email_check` | `check_new_emails` → `triggers.run_trigger('new_email')` | tiap 5 menit; satu email = satu tiket lewat jalur Orchestrator yang sama dengan webhook |
+| `ops_check` | `run_ops_check` → `OpsAgent.check_system` | tiap jam; finding berlevel di log, alert Discord hanya kalau `DISCORD_WEBHOOK_URL` diisi |
 | `shared_context_cleanup` | `cleanup_shared_context` | 24 jam; baris `ts` mundur diuji di selfcheck |
 | `approval_sweep` | `sweep_approvals` | TTL 24 jam, angka yang sama dengan `approval.TTL_S` |
 | `db_backup` | `backup_databases` | `~/.hermes-office/backups/YYYY-MM-DD/` |
 
-Belum didaftarkan, dan **sengaja tidak** didaftarkan sebagai job kosong: `email_check` (Support ada,
-kanal Gmail belum), `ops_check` (W5), `weekly_report`, `cache_warmer`, `recommendation_batch` (W6),
-dan `handoff_check` (W8). `start_scheduler()` menulis satu baris per job itu saat start, dan
+Belum didaftarkan, dan **sengaja tidak** didaftarkan sebagai job kosong: `weekly_report`,
+`cache_warmer`, `recommendation_batch` (W6) dan `handoff_check` (W8). `start_scheduler()` menulis satu baris per job itu saat start, dan
 `GET /health` mengembalikan daftarnya di `pending_jobs` beserta alasannya — jadi yang belum ada
 terlihat sebagai belum ada. Zona waktu: `HERMES_TZ` (default `Asia/Jakarta`).
 

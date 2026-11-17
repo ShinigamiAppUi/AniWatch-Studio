@@ -1,5 +1,29 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 3.5 — 17 Nov 2026 (W4 & W5 ditutup)
+
+### Ditambahkan
+
+- `hermes_agents/moderator.py`: `filter_comment`, `flag_content`, `ban_account` dengan tabel aturan
+  (`piracy`, `abuse` → ban; `spam`, `spoiler` → flag). Setiap keputusan = satu baris
+  `moderation_events` (append-only, DB-SCHEMA.md §14); status ban dihitung dari baris terakhir.
+- `hermes_agents/ops.py` + job `ops_check` (tiap jam): enam pemeriksaan (disk, database, dlq,
+  context, scheduler, mail), finding berlevel dengan saran tindakan, alert Discord opsional.
+- `hermes_agents/inbox.py` + job `email_check` (tiap 5 menit): baca kotak masuk lewat IMAP stdlib,
+  dekode subjek RFC 2047, buang kutipan balasan, lewati `Auto-Submitted` sendiri, dedupe UID di
+  SharedContext, dan tiap surat jadi tiket lewat `run_trigger('new_email')` yang sama dengan webhook.
+
+### Diubah
+
+- Scheduler: **7 job** hidup (tambah `email_check`, `ops_check`), `PENDING_JOBS` tinggal 4
+  (`weekly_report`, `cache_warmer`, `recommendation_batch`, `handoff_check`).
+- `GET /health` → `pending_jobs` kini 4 entri; tidak ada job kosong yang didaftarkan.
+- Selfcheck: **101 PASS / 0 FAIL** (13 cek baru untuk Moderator, Ops, dan kotak masuk dengan IMAP palsu).
+- ENV-VARS.md §3c + `.env.example`: `IMAP_HOST`, `IMAP_PORT`, `IMAP_USER`, `IMAP_PASSWORD`,
+  `IMAP_FOLDER`, `IMAP_MAX_PER_RUN`.
+
+---
+
 ## Rev 3.4a — 17 Nov 2026 (rilis pertama)
 
 Dokumen ini mencatat revisi; rilisnya diberi tag. Rilis pertama: **v0.5.0** (W1–W5 selesai) —

@@ -221,6 +221,13 @@ Orchestrator karena tidak menghasilkan karakter)
 **Output:** alert anomali, laporan sistem
 **Handoff:** → SecOps saat anomali berpola serangan; → manusia saat butuh keputusan infra
 
+**Implementasi W5:** `hermes_agents/ops.py`, dijalankan job `ops_check` tiap jam. Enam pemeriksaan:
+`disk` (sisa < 10% = critical), `database` (`PRAGMA quick_check` + ukuran), `dlq` (isi antrean),
+`context` (baris SharedContext menua), `scheduler` (job terdaftar & punya `next_run_time`), `mail`
+(SMTP siap / kiriman gagal 24 jam terakhir). Hasilnya finding berlevel + saran tindakan; alert hanya
+dikirim kalau `DISCORD_WEBHOOK_URL` diisi, dan kegagalan alert tidak menggagalkan job. Tidak ada
+auto-fix di sini — yang membereskan tetap job `jobs.py`.
+
 #### 🎧 Support — Generic
 
 **Key:** `Support` · **Rumah:** Main Office · **Tools:** `triage_ticket`, `search_kb`,
@@ -297,6 +304,8 @@ dipakai Notifier untuk URL feed).
 **Batas:** hanya timing & encoding. Terjemahan bukan tugasnya.
 **Implementasi W3:** `.srt` dan `.ass` dibaca (`parse_subtitle`), isinya dinormalisasi ke UTF-8 dan
 ditulis sebagai `<episode>.id.srt`; baris `subtitle_tracks` dibuat dengan `status='ready'`.
+
+**Status:** selesai di W3 bersama pipeline — ticket W5 tinggal Moderator, OpsAgent, dan `email_check`.
 
 #### 🌏 TranslationAgent
 
@@ -378,6 +387,12 @@ dilewati dan `notified_channels` mencatat channel yang benar-benar terkirim.
 **Trigger:** komentar/report masuk · **Output:** komentar bersih, akun di-ban
 **Slash:** `/unban [ip/user]`
 **Aturan:** `ban_account` harus menyimpan alasan + `rule` yang dilanggar (audit, SECURITY.md §10).
+
+**Implementasi W5:** `hermes_agents/moderator.py`. Empat aturan kecil dan deterministik (`piracy`,
+`abuse` → ban; `spam`, `spoiler` → flag), karena ban harus bisa dijelaskan ke orang yang kena.
+Setiap keputusan menulis satu baris `moderation_events` (append-only, §14 DB-SCHEMA). Komentar tanpa
+`user_id` ditandai, bukan menggagalkan job. Belum ada trigger komentar di 13 trigger bisnis; agent
+ini dipanggil dari antrean moderasi yang menyusul, dan hari ini diuji di selfcheck.
 
 #### 🚨 UserReportAgent
 

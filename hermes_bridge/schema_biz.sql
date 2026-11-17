@@ -37,6 +37,21 @@ CREATE TABLE IF NOT EXISTS user_reports (
 CREATE INDEX IF NOT EXISTS idx_reports_episode ON user_reports (episode_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_reports_status  ON user_reports (status, created_at);
 
+-- 4b. Moderation log (Moderator, DB-SCHEMA.md §14) -------------------------
+-- Append-only: a ban records the rule it broke and why (SECURITY.md §10).
+-- Nothing in the codebase updates or deletes a row here.
+CREATE TABLE IF NOT EXISTS moderation_events (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL,               -- flag | ban | unflag
+    user_id    TEXT,
+    subject    TEXT,                        -- comment / item id
+    rule       TEXT,                        -- piracy | abuse | spam | spoiler
+    reason     TEXT,
+    actor      TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_moderation_user ON moderation_events (user_id, created_at);
+
 -- 5. Episode schedule ------------------------------------------------------
 CREATE TABLE IF NOT EXISTS episode_schedule (
     episode_id     TEXT PRIMARY KEY,

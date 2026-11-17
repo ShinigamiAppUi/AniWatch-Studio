@@ -117,6 +117,24 @@ dependensi baru, dan provider apa pun yang punya endpoint SMTP bisa dipakai. Bar
 | `SMTP_TIMEOUT_S` | tidak | `15` | timeout koneksi/kirim |
 | `HERMES_OUTBOX` | tidak | `~/.hermes-office/outbox/replies.jsonl` | catatan **setiap** percobaan kirim (berhasil maupun gagal), 0600 |
 
+### 3c. Kanal masuk Support (W5) — `hermes_agents/inbox.py`
+
+Membaca kotak masuk juga lewat stdlib (`imaplib`, TLS wajib), bukan Gmail API — `SMTP_*` dan
+`IMAP_*` biasanya menunjuk akun yang sama, jadi cukup satu mailbox untuk dua arah.
+
+| Variabel | Wajib | Default | Arti |
+| --- | --- | --- | --- |
+| `IMAP_HOST` | ya, untuk membaca | — (kosong) | kalau kosong, `email_check` log sekali per jam dan tidak membuat tiket |
+| `IMAP_PORT` | tidak | `993` | selalu `IMAP4_SSL` |
+| `IMAP_USER` | ya, untuk membaca | — | login; biasanya sama dengan `SMTP_USER` |
+| `IMAP_PASSWORD` | tidak | — | app password Gmail/Fastmail; jangan ditulis di `.env.example` |
+| `IMAP_FOLDER` | tidak | `INBOX` | folder yang dibaca |
+| `IMAP_MAX_PER_RUN` | tidak | `10` | batas pesan per putaran (1–50); sisanya menunggu 5 menit berikutnya |
+
+Pesan dengan header `Auto-Submitted` selain `no` dilewati (itu balasan otomatis kita sendiri), dan
+UID yang sudah jadi tiket disimpan di SharedContext (`inbox:seen`) sehingga satu email tidak pernah
+menghasilkan dua tiket.
+
 Kegagalan kirim **bukan** pengecualian: `mailer.send()` mengembalikan `{sent, error}`, outbox mencatat,
 tiket tetap `open` sehingga kartu SLA berikutnya menagihnya. Status terakhir terlihat di `GET /health`
 (`mail.configured`, `mail.last`).

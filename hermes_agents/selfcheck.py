@@ -283,14 +283,14 @@ def main() -> int:
     sched1 = start_scheduler()
     sched2 = start_scheduler()
     ids = sorted(job.id for job in sched1.get_jobs())
-    check('w4: the scheduler registers the five jobs that exist',
-          ids == ['approval_sweep', 'db_backup', 'episode_embargo',
-                  'shared_context_cleanup', 'sla_check'], str(ids))
-    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 5)
+    check('w4: the scheduler registers the seven jobs that exist',
+          ids == ['approval_sweep', 'db_backup', 'email_check', 'episode_embargo',
+                  'ops_check', 'shared_context_cleanup', 'sla_check'], str(ids))
+    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 7)
     check('w4: /health can list the running jobs',
-          len(registered_jobs()) == 5 and len(pending_jobs()) == 6)
-    check('w4: the six unbuilt jobs are named, not faked',
-          len(PENDING_JOBS) == 6 and all(reason.strip() for reason in PENDING_JOBS.values()))
+          len(registered_jobs()) == 7 and len(pending_jobs()) == 4)
+    check('w4: the four unbuilt jobs are named, not faked',
+          len(PENDING_JOBS) == 4 and all(reason.strip() for reason in PENDING_JOBS.values()))
     shutdown_scheduler()
     check('w4: shutdown leaves no scheduler running', registered_jobs() == [])
 
@@ -539,6 +539,98 @@ def main() -> int:
           and w4triggers.AGENT_HANDLERS.get('new_email') is w4triggers._support_work)
     check('w5: sla_check is registered now that Support exists',
           'sla_check' not in [job['id'] for job in pending_jobs()], str(pending_jobs()))
+
+    # 8. W5 sisa: Moderator, OpsAgent, dan kotak masuk (email_check) -----------
+    from hermes_agents import inbox as inbox_mod
+    from hermes_agents.moderator import ModeratorAgent
+    from hermes_agents.ops import OpsAgent, run_ops_check
+
+    moderator = ModeratorAgent(con=con)
+    check('w5: a clean comment is allowed',
+          moderator.filter_comment('episodenya bagus banget')['action'] == 'allow')
+    banned = moderator.handle_comment({'comment': 'dasar anjing', 'user_id': 'u-ban',
+                                       'comment_id': 'c-1'}, now=now)
+    check('w5: an abusive comment bans the account with its rule',
+          banned['action'] == 'ban' and moderator.is_banned('u-ban'), str(banned))
+    history = moderator.history('u-ban')
+    check('w5: the ban row keeps rule, reason and actor (SECURITY.md §10)',
+          len(history) == 1 and history[0]['rule'] == 'abuse' and bool(history[0]['reason'])
+          and history[0]['actor'] == 'Moderator', str(history))
+    spoiler = moderator.handle_comment({'comment': 'spoiler: mati di episode 3',
+                                        'user_id': 'u-spoiler', 'comment_id': 'c-2'}, now=now)
+    check('w5: a spoiler is flagged, not banned',
+          spoiler['action'] == 'flag' and not moderator.is_banned('u-spoiler'), str(spoiler))
+    anonymous = moderator.handle_comment({'comment': 'link torrent gratis',
+                                          'comment_id': 'c-3'}, now=now)
+    check('w5: without a user_id a bad comment is flagged instead of failing',
+          anonymous['action'] == 'flag', str(anonymous))
+    moderator.ban_account('u-ban', 'piracy', 'mengulang', now=now + 1)
+    check('w5: moderation rows are append-only (a second ban is a second row)',
+          len(moderator.history('u-ban')) == 2, str(len(moderator.history('u-ban'))))
+
+    findings = OpsAgent(now=now).check_system()
+    names = {f['check'] for f in findings}
+    check('w5: Ops checks disk, database, dlq, context, scheduler and mail',
+          names == {'disk', 'database', 'dlq', 'context', 'scheduler', 'mail'}, str(sorted(names)))
+    check('w5: every finding has a level, and a bad one says what to do',
+          all(f['level'] in ('ok', 'warn', 'critical')
+              and (f['level'] == 'ok' or bool(f['action'])) for f in findings),
+          str([(f['check'], f['level']) for f in findings]))
+
+    class _FakeIMAP:
+        """A mailbox that serves the raw messages it was given, by uid."""
+
+        def __init__(self, raws: dict[str, bytes]) -> None:
+            self.raws = raws
+            self.logged_out = False
+
+        def select(self, folder: str):
+            return 'OK', [b'1']
+
+        def uid(self, command: str, *args):
+            if command == 'search':
+                return 'OK', [' '.join(self.raws).encode()]
+            if command == 'fetch':
+                raw = self.raws.get(args[0])
+                return ('OK', [(b'1 (BODY[])', raw)]) if raw else ('NO', [])
+            return 'OK', []
+
+        def logout(self) -> None:
+            self.logged_out = True
+
+    raw_mail = (b'From: Budi <Budi@Contoh.com>\r\n'
+                b'Subject: =?UTF-8?B?Q2FyYSBtZW1iYXRhbGthbiBsYW5nZ2FuYW4=?=\r\n'
+                b'Content-Type: text/plain; charset=utf-8\r\n\r\n'
+                b'Halo, cara membatalkan langganan?\r\n> kutipan lama\r\n')
+    raw_auto = (b'From: Bot <bot@aniwatch.example>\r\nSubject: Re: x\r\n'
+                b'Auto-Submitted: auto-replied\r\n\r\nbalasan kita sendiri\r\n')
+    os.environ.update({'IMAP_HOST': 'imap.example', 'IMAP_USER': 'support@example'})
+
+    box = _FakeIMAP({'1': raw_mail, '2': raw_auto})
+    messages = inbox_mod.fetch_new(factory=lambda cfg: box)
+    check('w5: IMAP reading decodes the subject and trims the quoted history',
+          len(messages) == 1 and messages[0]['subject'] == 'Cara membatalkan langganan'
+          and 'kutipan' not in messages[0]['body'], str(messages))
+    check('w5: our own auto-reply is skipped, and a seen uid is not fetched twice',
+          inbox_mod.fetch_new(factory=lambda cfg: box) == [] and box.logged_out)
+
+    mails = w4jobs.check_new_emails(fetch=lambda cfg: _FakeIMAP({'9': raw_mail}))
+    made = (mails[0].get('work') or {}) if mails else {}
+    email_tickets = con.execute("SELECT COUNT(*) FROM tickets WHERE channel = 'email'").fetchone()[0]
+    check('w5: a new mail becomes a ticket through the same Orchestrator path',
+          len(mails) == 1 and made.get('action') == 'send_failed' and email_tickets >= 1,
+          f'{made} email_tickets={email_tickets}')
+
+    os.environ['IMAP_HOST'] = ''
+    check('w5: without IMAP settings the job returns nothing instead of raising',
+          w4jobs.check_new_emails(fetch=lambda cfg: _FakeIMAP({'1': raw_mail})) == []
+          and inbox_mod.configured() is False)
+    os.environ['IMAP_HOST'] = 'imap.example'
+    pending_ids = [job['id'] for job in pending_jobs()]
+    check('w5: email_check and ops_check are registered, leaving four pending',
+          'email_check' not in pending_ids and 'ops_check' not in pending_ids
+          and len(pending_ids) == 4, str(pending_ids))
+
     support.close()
 
     print()

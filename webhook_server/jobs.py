@@ -30,6 +30,9 @@ log = logging.getLogger(__name__)
 CONTEXT_HOURS = 24.0
 APPROVAL_SECONDS = 86400.0
 
+#: When the "IMAP not configured" warning was last printed (once an hour)
+_mail_warned_at = 0.0
+
 
 def cleanup_shared_context(hours: float = CONTEXT_HOURS) -> int:
     """Drop SharedContext rows older than `hours`; returns how many went.
@@ -76,6 +79,56 @@ def sla_check(timeout: float = 300.0) -> dict:
     bdb.init_db()
     with Agent('Support', 'cek SLA') as char:
         return SupportAgent().check_sla_breaches(char=char, timeout=timeout)
+
+
+def check_new_emails(fetch=None, timeout_warn_s: float = 3600.0) -> list[dict]:
+    """Read the support inbox and turn every new mail into a ticket (W5).
+
+    SCHEDULER.md §2: when IMAP is not configured this logs **once an hour**, not
+    every five minutes - a warning that repeats 288 times a day is noise, not a
+    signal. Each message goes through `triggers.run_trigger('new_email')`, so it
+    gets the same Orchestrator -> Support path as a webhook.
+
+    Returns the ticket results (one per mail).
+    """
+    global _mail_warned_at
+
+    from hermes_agents import inbox
+
+    if not inbox.configured():
+        now = time.time()
+        if now - _mail_warned_at >= timeout_warn_s:
+            _mail_warned_at = now
+            log.warning('email_check: IMAP belum dikonfigurasi (IMAP_HOST/IMAP_USER kosong) - '
+                        'log ini muncul sekali per jam')
+        return []
+
+    try:
+        messages = inbox.fetch_new(factory=fetch)
+    except Exception as err:  # noqa: BLE001 - a mailbox hiccup is not a sidecar crash
+        log.warning('email_check: mailbox tidak bisa dibaca: %s', err)
+        return []
+
+    from . import triggers
+
+    results: list[dict] = []
+    for message in messages:
+        result = triggers.run_trigger(
+            'new_email',
+            {'subject': message['subject'] or '(tanpa subjek)', 'body': message['body'],
+             'email': message['from'], 'user_id': message['from']},
+            'scheduler',
+        )
+        results.append(result)
+        log.info('email_check: %s -> %s', message['from'], (result.get('work') or {}).get('action'))
+    return results
+
+
+def run_ops_check(now: float | None = None) -> dict:
+    """One hourly Ops round (W5): findings in the log, alerts to Discord if set."""
+    from hermes_agents.ops import run_ops_check as _ops
+
+    return _ops(now=now)
 
 
 def run_episode_scheduler() -> list[dict]:

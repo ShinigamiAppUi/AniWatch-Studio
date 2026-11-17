@@ -429,3 +429,28 @@ ditulis sebagai skrip manual di `scripts/migrations/` dan dijalankan dengan pers
 
 Backup job **tidak** memakai `.backup` dari proses yang sedang menulis WAL tanpa checkpoint —
 jalankan `PRAGMA wal_checkpoint(TRUNCATE)` dulu, atau pakai API backup SQLite (aman untuk DB hidup).
+
+---
+
+## 14. `moderation_events` — Moderator (W5)
+
+Log keputusan moderasi. **Append-only**: tidak ada kode yang `UPDATE` atau `DELETE` di tabel ini
+(SECURITY.md §10 — "audit yang bisa dihapus oleh agent bukan audit").
+
+```sql
+CREATE TABLE IF NOT EXISTS moderation_events (
+    id         TEXT PRIMARY KEY,          -- md-xxxxxxxxxx
+    kind       TEXT NOT NULL,             -- flag | ban | unflag
+    user_id    TEXT,                      -- NULL untuk flag tanpa akun
+    subject    TEXT,                      -- id komentar/item
+    rule       TEXT,                      -- piracy | abuse | spam | spoiler
+    reason     TEXT,                      -- potongan teks yang dilanggar
+    actor      TEXT NOT NULL,             -- 'Moderator'
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_moderation_user ON moderation_events (user_id, created_at);
+```
+
+Aturan yang dipakai `moderator.py`: `piracy` dan `abuse` → `ban`, `spam` dan `spoiler` → `flag`.
+Status ban dihitung dari baris **terakhir** milik `user_id` (`ModeratorAgent.is_banned`), jadi
+"unban" nanti cukup menambah baris baru — bukan menghapus yang lama.

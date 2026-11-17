@@ -74,15 +74,19 @@ dengan DMCA cancel yang menang balapan dan penjaga duplikat. 37 cek lama di self
 | Minggu | Yang belum |
 | --- | --- |
 | W6 | Marketing, CacheWarmer, RecommendationAgent, `weekly_report`, `cache_warmer`, `recommendation_batch` |
-| W5 sisa | `email_check` (butuh Gmail API untuk **membaca** email masuk), OpsAgent, Subtitle + Moderator |
+| W5 sisa | ~~`email_check`, OpsAgent, Subtitle + Moderator~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.5 |
 | W7 | DesignAgent (premium) |
 | W8 | `run_orchestrator` di Python + protokol handoff (`hermes_bridge/handoff.py`), `handoff_check` |
 | W9 | Finance, Legal, Security: refund/chargeback end-to-end, DMCA otomatis |
 | W10 | Dashboard lengkap, slash command sisanya |
 
 Job yang belum ada tercatat di `GET /health` → `pending_jobs`, bukan dijalankan sebagai no-op.
-Balasan Support **belum** membaca inbox (hanya mengirim); notifikasi user dan QC pipeline masih
-mencatat, bukan memanggil layanan luar.
+Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
+
+> **Setelah tag v0.5.0** (Rev 3.5, commit berikutnya): sisa W5 ditutup — `Moderator`, `OpsAgent`
+> (`ops_check` tiap jam), dan `email_check` yang **membaca** inbox lewat IMAP stdlib
+> (`hermes_agents/inbox.py`). `pending_jobs` kini 4, semuanya milik W6/W8. Tag tetap menunjuk
+> commit rilis pertama; catatan lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5.
 
 ### Cara menjalankan
 

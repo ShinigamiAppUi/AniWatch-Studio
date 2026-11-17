@@ -37,8 +37,6 @@ COMMON = dict(max_instances=1, coalesce=True, misfire_grace_time=300)
 
 #: `id` -> why it is not registered yet. Printed by `pending_jobs()` and at start.
 PENDING_JOBS: dict[str, str] = {
-    'email_check': 'butuh Gmail API untuk MEMBACA email masuk (membalas sudah lewat SMTP)',
-    'ops_check': 'butuh OpsAgent.system_check (W5)',
     'weekly_report': 'butuh MarketingAgent + Orchestrator (W6/W8)',
     'cache_warmer': 'butuh CacheWarmerAgent (W6)',
     'recommendation_batch': 'butuh RecommendationAgent (W6)',
@@ -86,6 +84,10 @@ def start_scheduler() -> BackgroundScheduler:
                       id='approval_sweep', **COMMON)
         sched.add_job(_guard(jobs.sla_check), IntervalTrigger(minutes=5),
                       id='sla_check', **COMMON)
+        sched.add_job(_guard(jobs.check_new_emails), IntervalTrigger(minutes=5),
+                      id='email_check', **COMMON)
+        sched.add_job(_guard(jobs.run_ops_check), IntervalTrigger(hours=1),
+                      id='ops_check', **COMMON)
         sched.add_job(_guard(jobs.backup_databases), 'cron', hour=2,
                       id='db_backup', **COMMON)
         sched.start()

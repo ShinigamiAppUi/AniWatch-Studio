@@ -95,11 +95,13 @@ yang memang dirancang; `cleanup_shared_context` terbukti menghapus baris > 24 ja
 **Status W4:** sisi masuk selesai di `webhook_server/` — `triggers.py` (13 trigger dipetakan
 eksplisit ke role, tanpa fallback `ops`), `payments.py` (SHA-512 + satu baris per notifikasi),
 `jobs.py`, `scheduler.py`, `main.py`. `POST /webhook` menjawab 403 / 400 / `{"status":"queued"}`,
-dan sidecar menolak start tanpa `WEBHOOK_SECRET` / `MIDTRANS_SERVER_KEY`. Scheduler baru
-mendaftarkan **4 job yang kerjanya ada** (`episode_embargo`, `shared_context_cleanup`,
-`approval_sweep`, `db_backup`); 7 sisanya tercatat di `PENDING_JOBS` beserta alasannya karena
-agent-nya baru ada di W5–W8 — bukan didaftarkan sebagai job kosong. Semuanya masuk
-`python -m hermes_agents.selfcheck` dan job CI `selfcheck`.
+dan sidecar menolak start tanpa `WEBHOOK_SECRET` / `MIDTRANS_SERVER_KEY`. Scheduler mendaftarkan
+**7 job yang kerjanya ada** — `episode_embargo`, `shared_context_cleanup`, `approval_sweep`,
+`db_backup` (W4), lalu `sla_check` (W5), `email_check` dan `ops_check` (W5, `hermes_agents/inbox.py`
++ `ops.py`). Empat sisanya (`weekly_report`, `cache_warmer`, `recommendation_batch`, `handoff_check`)
+tetap tercatat di `PENDING_JOBS` beserta alasannya karena agent-nya baru ada di W6/W8 — bukan
+didaftarkan sebagai job kosong. Semuanya masuk `python -m hermes_agents.selfcheck` dan job CI
+`selfcheck`.
 
 ### W5 — Support + Community
 
@@ -110,7 +112,18 @@ agent-nya baru ada di W5–W8 — bukan didaftarkan sebagai job kosong. Semuanya
   `new_email` / `user_report` menjalankan kerja agent, bukan cuma menggambar karakter
 - [x] Kanal keluar SMTP (`hermes_agents/mailer.py`): `send_reply` mengirim sungguhan; gagal kirim →
   tiket tetap `open`, alasan tersimpan, setiap percobaan dicatat di outbox
-- [ ] Subtitle + Moderator (menyusul; bukan bagian dari kriteria terima W5 yang diuji di sini)
+- [x] **Subtitle** — sudah berjalan sejak W3: `.srt`/`.ass` dibaca `parse_subtitle`, dinormalisasi
+  ke UTF-8 dan ditulis sebagai `<episode>.id.srt`, baris `subtitle_tracks` dibuat `status='ready'`
+- [x] **Moderator** (`hermes_agents/moderator.py`): `filter_comment` (4 aturan: piracy, abuse,
+  spam, spoiler), `flag_content`, `ban_account` — setiap ban menyimpan `rule` + alasan + aktor di
+  `moderation_events` yang **append-only** (SECURITY.md §10); tanpa `user_id` komentar hanya
+  ditandai, tidak menggagalkan job
+- [x] **OpsAgent** (`hermes_agents/ops.py`): `check_system` memeriksa disk, `PRAGMA quick_check` + ukuran
+  DB, isi DLQ, baris SharedContext, job scheduler, dan kesiapan SMTP; hasilnya finding berlevel
+  (`ok`/`warn`/`critical`) dengan saran tindakan, dikirim ke Discord hanya bila `DISCORD_WEBHOOK_URL` diisi
+- [x] **`email_check`** (`hermes_agents/inbox.py`): IMAP stdlib (`imaplib`, `BODY.PEEK[]`), subjek
+  RFC 2047 didekode, kutipan balasan dibuang, auto-reply kita sendiri (`Auto-Submitted`) dilewati,
+  UID yang sudah diproses disimpan di SharedContext; kredensial kosong → log **sekali per jam**
 
 **Deliverable:** tiket dari email/form dijawab dari KB atau dieskalasi; laporan user dirutekan.
 
