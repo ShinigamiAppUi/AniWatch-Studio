@@ -1,5 +1,25 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 4.2 — 17 Nov 2026 (`/leads` sebagai pipeline)
+
+### Diubah
+
+- `webhook_server/commands.py` `/leads`: kini menjawab tiga hal sekaligus dan menyebut jendela
+  masing-masing — pipeline per stage dari **semua** `lead:*` (deal yang menang minggu lalu tetap
+  `won`, jadi tidak dilabeli "hari ini"), jumlah lead yang masuk hari ini beserta dua terbaru
+  (tahap + skor), dan handoff ber-subject `lead:` yang belum diambil dikelompokkan per rute
+  (`Sales→Marketing`, `Marketing→Support`). Respons membawa `pipeline`, `handoffs`, `waiting`.
+- Selfcheck: **210 PASS / 0 FAIL** (2 cek baru: hitungan per stage + handoff tertunda tampil;
+  handoff yang di-drop hilang dari tampilan).
+- API-REFERENCE §6 dan PLAN W10 diperbarui; tidak ada command baru (tetap 23).
+
+### Catatan
+
+- "Tertunda" berarti handoff yang masih ada di SharedContext; yang sudah diambil penerima tidak
+  dihitung dua kali, karena `take()` menghapusnya (AGENT-HANDOFFS §5.1).
+
+---
+
 ## Rev 4.1 — 17 Nov 2026 (W8 sisa: agent Sales + Marketing)
 
 ### Ditambahkan

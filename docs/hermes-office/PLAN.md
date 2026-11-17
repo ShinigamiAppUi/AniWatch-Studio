@@ -309,7 +309,10 @@ manual kecuali approval.
   jumlah item live/dicabut. Mengurutkan item berdasarkan harga lalu menyebutnya "terlaris" akan jadi
   satu-satunya laporan palsu di kantor.
 - **`/leads` membaca `lead:*` yang ditulis agent Sales** (W8 sisa, sesudah W10). Command
-  menampilkan tahap + skor per lead; hari tanpa lead dikatakan kosong, bukan diisi contoh.
+  menampilkan pipeline per stage (semua `lead:*`, karena deal yang menang minggu lalu tetap `won`),
+  jumlah lead yang masuk hari ini, dan handoff ber-subject `lead:` yang belum diambil per rute —
+  jadi "qualified tapi tidak ada yang mengambil" terlihat, bukan terkubur. Hari tanpa lead
+  dikatakan kosong, bukan diisi contoh.
 
 **Verifikasi W10:** selfcheck **193 PASS / 0 FAIL** (17 cek W10: SLA dari respons pertama, migrasi
 kolom lama, `/biz` lewat HTTP sungguhan + kantor mati, satu lead nyata, `/topselling` jujur, insiden

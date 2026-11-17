@@ -20,7 +20,7 @@ The commands W7 and W9 introduce:
 W10 adds the rest of API-REFERENCE.md §6, split by where the answer comes from:
 
     /biz                    the office's own counters (GET /biz-metrics)
-    /leads                  `lead:*` in SharedContext (Sales writes them when it exists)
+    /leads                  the `lead:*` pipeline per stage, today's leads, waiting handoffs
     /tickets                tickets by status, with the newest open ones
     /sla                    compliance + the tickets past their deadline
     /topselling             what a sale per item would need; no ranking is invented
@@ -33,11 +33,16 @@ W10 adds the rest of API-REFERENCE.md §6, split by where the answer comes from:
     /reports                today's user reports
     /report-stats           the last 7 days, per day and per category
 
-Two of those are deliberately answers about missing data, not fake numbers:
-`/topselling` says `payment_events` has no `item_id`, and `/leads` says the
-`lead:*` keys only exist once a Sales agent writes them (PLAN.md W8 leaves that
-agent open). A chat line that claimed otherwise would be the only part of the
-office not checked against the DB.
+One of those is deliberately an answer about missing data, not a fake number:
+`/topselling` says `payment_events` has no `item_id`, so there is no per-item
+ranking to print. A chat line that claimed otherwise would be the only part of
+the office not checked against the DB.
+
+`/leads` reports two different windows in one message and labels them: stage
+counts over every `lead:*` record (a deal won last week is still won), and the
+leads that came in today. Pending handoffs whose subject is a `lead:` are shown
+next to them, because "qualified but nobody picked it up" is the failure a
+pipeline view exists to catch.
 
 `/approve` calls `premium.decide`, which is the only writer out of
 `pending_approval`; the card's answer goes through the same function from
@@ -366,29 +371,78 @@ def _biz(now: float | None) -> dict:
     }
 
 
+#: Pipeline stages in the order `/leads` reports them (AGENTS.md §4.1)
+LEAD_STAGES = ('new', 'contacted', 'qualified', 'meeting', 'won', 'lost')
+
+
 def _leads(now: float | None) -> dict:
-    """`lead:*` in SharedContext, written by the Sales agent (AGENTS §4.1)."""
+    """`/leads`: pipeline per stage, today's leads, and lead handoffs still waiting.
+
+    Two windows on purpose. The stage counts cover every `lead:*` record, because
+    a deal won last week is still won today; the list is only today's leads. A
+    single "won 1" under the word "hari ini" would be a misreading the office
+    cannot afford, so the reply labels each line.
+
+    Handoffs are filtered to subjects starting `lead:` - the ones the Sales
+    pipeline left behind. A pending `Marketing -> Support` handoff for a lead
+    means the customer's follow-up is stuck, which is exactly what a pipeline
+    view is for.
+    """
+    from hermes_bridge import handoff
     from hermes_agents import store
 
     at = _at(now)
-    rows = store.context().recent('lead:', since=_day_start(at))
-    if not rows:
-        return {'handled': True, 'ok': True, 'leads': [], 'insufficient':
-                'tidak ada key lead:* hari ini; agent Sales menulisnya lewat trigger '
+    ctx = store.context()
+    everything = ctx.find('lead:')
+    rows = ctx.recent('lead:', since=_day_start(at))
+
+    pipeline: dict[str, int] = {stage: 0 for stage in LEAD_STAGES}
+    for value in everything.values():
+        record = value if isinstance(value, dict) else {}
+        stage = str(record.get('stage') or record.get('status') or 'new')
+        stage = stage if stage in pipeline else 'new'
+        pipeline[stage] += 1
+
+    waiting = {key: env for key, env in handoff.pending().items()
+               if isinstance(env, dict) and str(env.get('subject') or '').startswith('lead:')}
+    routes: dict[str, int] = {}
+    for env in waiting.values():
+        route = f'{env.get("from")}→{env.get("to")}'
+        routes[route] = routes.get(route, 0) + 1
+
+    handoff_line = ''
+    if waiting:
+        parts = ', '.join(f'{route} {n}' for route, n in sorted(routes.items()))
+        handoff_line = f'🔗 Handoff lead tertunda: {len(waiting)} ({parts})'
+
+    if not everything:
+        return {'handled': True, 'ok': True, 'leads': [], 'pipeline': pipeline,
+                'handoffs': routes, 'waiting': sorted(waiting), 'insufficient':
+                'tidak ada key lead:*; agent Sales menulisnya lewat trigger '
                 'new_lead/form_submit/deal_stage_change',
-                'reply': _reply('📭 Belum ada lead hari ini.',
+                'reply': _reply('📭 Belum ada lead.',
                                 'Key lead:* ditulis agent Sales dari trigger new_lead, '
                                 'form_submit, dan deal_stage_change.',
-                                'Kantor tidak mengarang lead untuk mengisi panel.')}
-    lines = [f'🧲 {len(rows)} lead hari ini:']
-    for row in rows[: MAX_LINES - 1]:
+                                'Kantor tidak mengarang lead untuk mengisi panel.',
+                                handoff_line)}
+
+    filled = ', '.join(f'{stage} {n}' for stage, n in pipeline.items() if n)
+    lines = [
+        f'🧲 Pipeline: {sum(pipeline.values())} lead — {filled or "-"}',
+        f'📅 Hari ini: {len(rows)} lead masuk' if rows else '📅 Hari ini: belum ada lead masuk',
+    ]
+    for row in rows[:2]:
         value = row.get('value') if isinstance(row.get('value'), dict) else {}
         label = value.get('name') or value.get('email') or row['key'].split(':', 1)[-1]
         stage = value.get('stage') or value.get('status') or '-'
         score = value.get('score')
         grades = f', skor {float(score):.2f}' if isinstance(score, (int, float)) else ''
         lines.append(f'- {str(label)[:60]} ({stage}{grades}) oleh {row.get("owner") or "-"}')
+    lines.append(handoff_line)
+    if len(rows) > 2:
+        lines.append(f'…dan {len(rows) - 2} lead lain hari ini')
     return {'handled': True, 'ok': True, 'leads': [row['key'] for row in rows],
+            'pipeline': pipeline, 'handoffs': routes, 'waiting': sorted(waiting),
             'reply': _reply(*lines)}
 
 

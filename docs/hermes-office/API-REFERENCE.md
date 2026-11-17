@@ -588,7 +588,7 @@ selfcheck W10 memeriksanya.
 | Command W10 | Output | Sumber data |
 | --- | --- | --- |
 | `/biz` | counter hari ini, SLA, siapa yang bekerja. **Butuh kantor berjalan**: tanpa `GET /biz-metrics` jawabannya alasan, bukan angka | `GET /biz-metrics` (`chat.db`) |
-| `/leads` | `lead:*` hari ini: nama, tahap, skor. Tanpa key: hari itu memang kosong | SharedContext `lead:*` (ditulis agent Sales) |
+| `/leads` | pipeline per stage (**semua** `lead:*`, bukan hanya hari ini) + jumlah lead masuk hari ini + handoff ber-subject `lead:` yang belum diambil, dikelompokkan per rute `Sales→Marketing`. Tanpa lead: hari itu memang kosong | SharedContext `lead:*`, `handoff.pending()` (ditulis agent Sales/Marketing) |
 | `/tickets` | jumlah per status + 3 tiket terbuka terbaru | `tickets` |
 | `/sla` | compliance tiket selesai (7 hari), yang lewat deadline, rata-rata respons pertama + jumlah sampel | `tickets` |
 | `/topselling` | jumlah item live/dicabut. **Tidak ada ranking**: penjualan per item tidak tercatat | `premium_items`, `payment_events` |

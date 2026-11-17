@@ -1465,6 +1465,23 @@ def main() -> int:
           leads_reply.get('ok') is True and 'lead:sc-lead-1' in leads_reply.get('leads', [])
           and 'won' in leads_reply.get('reply', '')
           and 'skor' in leads_reply.get('reply', ''), str(leads_reply)[:200])
+    stuck = ho.hand_off('Sales', 'Marketing', 'lead_converted', 'lead:sc-stuck',
+                        {'name': 'Nadia', 'email': 'nadia@toko.id', 'score': 0.8,
+                         'plan': 'premium'}, now=now, context=ctx)
+    pipeline_reply = w7commands.handle_command('/leads', now=now)
+    check('w8: /leads counts the pipeline per stage and shows the stuck handoff',
+          pipeline_reply['pipeline'].get('won') == 1
+          and pipeline_reply['pipeline'].get('qualified', 0) >= 1
+          and pipeline_reply['pipeline'].get('new', 0) >= 1
+          and pipeline_reply['handoffs'].get('Sales→Marketing') == 1
+          and stuck in pipeline_reply['waiting']
+          and 'Handoff lead tertunda' in pipeline_reply.get('reply', ''),
+          str(pipeline_reply)[:240])
+    ho.drop(stuck, context=ctx)
+    cleared = w7commands.handle_command('/leads', now=now)
+    check('w8: a taken or dropped handoff leaves the pipeline view',
+          cleared['handoffs'] == {} and cleared['waiting'] == [], str(cleared)[:200])
+
     via_webhook = w4triggers.run_trigger(
         'new_lead', {'name': 'Tono', 'email': 'tono@kedai.id', 'plan': 'premium',
                      'budget_idr': 75000}, source='selfcheck')
