@@ -262,7 +262,10 @@ Semua ada di `python -m hermes_agents.selfcheck` (§9), kecuali yang butuh kanto
   tiga opsi; `timeout` tidak mengubah apa pun sehingga tiket ditagih lagi di putaran berikutnya
 - [x] Cleanup 24 jam menghapus context lama dan **tidak** menghapus yang baru
 - [x] Sales → Marketing → Support berantai dengan tiga node, payload ikut pindah, `handoff:*`
-  kosong lagi setelahnya. Karakter di kantor menyusul bersama agent Sales/Marketing (W6).
+  kosong lagi setelahnya. Sejak W8 sisa rantai ini berjalan pada agent sungguhan:
+  `sales.handle_trigger('new_lead')` → `marketing.onboard_lead()` → `support.receive_handoff()`
+  (tiket onboarding), lalu `deal_stage_change` ke `meeting` → `support` `brief:<lead>`.
+  Selfcheck §14 menguji keduanya, termasuk konversi kedua yang tidak mengirim surat kedua.
 - [x] Tidak ada `import` antar file agent: yang mengikuti rantai adalah
   `hermes_agents/orchestrator.py`, bukan agent yang memanggil agent lain
 
@@ -295,3 +298,9 @@ Semua ada di `python -m hermes_agents.selfcheck` (§9), kecuali yang butuh kanto
 `triggers.run_trigger` memanggil `follow_handoffs(role)` setelah kerja agent selesai, jadi rantai
 berjalan pada trigger yang sama — bukan menunggu job yang belum ada. Job `handoff_check` hanya
 menagih handoff yang **tidak pernah** diambil.
+
+Node penerima yang punya dua pekerjaan membedakannya dari `expects`: node `Marketing` menjalankan
+`onboard_lead()` untuk `welcome_email_campaign` dan laporan mingguan untuk trigger, node `Support`
+menjalankan `receive_handoff()` untuk `onboarding_followup`/`pre_meeting_brief` dan triage tiket
+untuk trigger biasa. `run_orchestrator()` menitipkan `trigger` di payload supaya node `Sales`
+tahu trigger mana dari ketiganya yang sedang ia kerjakan.

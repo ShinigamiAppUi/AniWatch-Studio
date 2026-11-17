@@ -367,23 +367,27 @@ def _biz(now: float | None) -> dict:
 
 
 def _leads(now: float | None) -> dict:
-    """`lead:*` in SharedContext, written by a Sales agent that does not exist yet."""
+    """`lead:*` in SharedContext, written by the Sales agent (AGENTS §4.1)."""
     from hermes_agents import store
 
     at = _at(now)
     rows = store.context().recent('lead:', since=_day_start(at))
     if not rows:
         return {'handled': True, 'ok': True, 'leads': [], 'insufficient':
-                'tidak ada key lead:* hari ini; agent Sales belum ada (PLAN.md W8)',
+                'tidak ada key lead:* hari ini; agent Sales menulisnya lewat trigger '
+                'new_lead/form_submit/deal_stage_change',
                 'reply': _reply('📭 Belum ada lead hari ini.',
-                                'Key lead:* hanya ditulis agent Sales, dan agent itu belum ada.',
+                                'Key lead:* ditulis agent Sales dari trigger new_lead, '
+                                'form_submit, dan deal_stage_change.',
                                 'Kantor tidak mengarang lead untuk mengisi panel.')}
     lines = [f'🧲 {len(rows)} lead hari ini:']
     for row in rows[: MAX_LINES - 1]:
         value = row.get('value') if isinstance(row.get('value'), dict) else {}
         label = value.get('name') or value.get('email') or row['key'].split(':', 1)[-1]
         stage = value.get('stage') or value.get('status') or '-'
-        lines.append(f'- {str(label)[:60]} ({stage}) oleh {row.get("owner") or "-"}')
+        score = value.get('score')
+        grades = f', skor {float(score):.2f}' if isinstance(score, (int, float)) else ''
+        lines.append(f'- {str(label)[:60]} ({stage}{grades}) oleh {row.get("owner") or "-"}')
     return {'handled': True, 'ok': True, 'leads': [row['key'] for row in rows],
             'reply': _reply(*lines)}
 

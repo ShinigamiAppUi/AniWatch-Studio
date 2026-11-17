@@ -356,6 +356,13 @@ Header wajib `X-Webhook-Secret`. Body:
 { "type": "new_lead", "data": { "name": "Budi", "email": "budi@example.com" }, "source": "typeform" }
 ```
 
+`new_lead`, `form_submit`, dan `deal_stage_change` menjalankan agent Sales (W8 sisa), bukan hanya
+menggambar karakter. Field yang dibaca `qualify_lead`: `name`, `email`, `company`, `company_size`,
+`plan`, `budget_idr`, `source`. `deal_stage_change` butuh `lead_id` (atau `id`/`email`) + `stage`
+(`new`/`contacted`/`qualified`/`meeting`/`won`/`lost`, alias `closed_won`, `demo`); `meeting` juga
+butuh `when` + `timezone`. Respons route tetap `{"status":"queued"}` — hasil kerjanya terbaca di
+`/leads`, bubble karakter, dan SharedContext.
+
 `type` harus salah satu `SUPPORTED_TRIGGERS` (kalau tidak → 400):
 
 `new_lead`, `form_submit`, `deal_stage_change`, `analytics_ready`, `content_schedule`,
@@ -581,7 +588,7 @@ selfcheck W10 memeriksanya.
 | Command W10 | Output | Sumber data |
 | --- | --- | --- |
 | `/biz` | counter hari ini, SLA, siapa yang bekerja. **Butuh kantor berjalan**: tanpa `GET /biz-metrics` jawabannya alasan, bukan angka | `GET /biz-metrics` (`chat.db`) |
-| `/leads` | `lead:*` hari ini. Tanpa key: menyebut agent Sales belum ada | SharedContext `lead:*` |
+| `/leads` | `lead:*` hari ini: nama, tahap, skor. Tanpa key: hari itu memang kosong | SharedContext `lead:*` (ditulis agent Sales) |
 | `/tickets` | jumlah per status + 3 tiket terbuka terbaru | `tickets` |
 | `/sla` | compliance tiket selesai (7 hari), yang lewat deadline, rata-rata respons pertama + jumlah sampel | `tickets` |
 | `/topselling` | jumlah item live/dicabut. **Tidak ada ranking**: penjualan per item tidak tercatat | `premium_items`, `payment_events` |

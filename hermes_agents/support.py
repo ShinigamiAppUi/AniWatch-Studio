@@ -412,3 +412,66 @@ def handle_trigger(payload: object, char: Any = None) -> dict:
         return agent.handle_ticket(payload, char=char)
     finally:
         agent.close()
+
+
+def receive_handoff(payload: object, now: float | None = None) -> dict:
+    """Support's node for the two handoffs addressed to it (AGENT-HANDOFFS §3).
+
+    `onboarding_followup` (from Marketing) becomes a real ticket, because a
+    follow-up nobody can be assigned is not a follow-up. `pre_meeting_brief`
+    (from Sales) becomes the `brief:<lead>` record Support reads before the
+    call - there is no calendar to attach it to, and a ticket for a briefing
+    note would mislabel the queue (`/tickets` counts what customers asked for).
+    """
+    data = payload if isinstance(payload, dict) else {}
+    expects = str(data.get('expects') or '').strip()
+    if expects == 'onboarding_followup':
+        return _onboarding_ticket(data, now=now)
+    if expects == 'pre_meeting_brief':
+        return _meeting_brief(data, now=now)
+    return {'action': 'ignored',
+            'reason': f'expects {expects or "kosong"} bukan untuk Support'}
+
+
+def _lead_id_of(data: dict) -> str:
+    """`lead:42` (subject) or `42` (payload) -> `42`, the same id Sales used."""
+    subject = str(data.get('subject') or '').split(':')
+    if len(subject) > 1 and subject[-1].strip():
+        return subject[-1].strip()
+    return str(data.get('lead_id') or '').strip()
+
+
+def _onboarding_ticket(data: dict, now: float | None = None) -> dict:
+    """Write the follow-up ticket Marketing asked for, then return it."""
+    at = time.time() if now is None else float(now)
+    lead_id = _lead_id_of(data) or 'tanpa-id'
+    email = ' '.join(str(data.get('email') or '').split())[:200]
+    plan = str(data.get('plan') or 'free')
+    channel = str(data.get('channel') or 'web')
+    agent = SupportAgent()
+    try:
+        ticket = agent.triage_ticket(
+            f'Onboarding {plan}: {email or lead_id}',
+            f'Lead {lead_id} memilih paket {plan} lewat {channel}. Tindak lanjuti: '
+            'konfirmasi akses, tanyakan kebutuhan, dan tawarkan bantuan awal.',
+            user_id=email or f'lead:{lead_id}', channel='onboarding', now=at,
+        )
+    finally:
+        agent.close()
+    log.info('support: tiket onboarding %s untuk lead %s', ticket.get('id'), lead_id)
+    return {'action': 'onboarding_ticket', 'ticket': ticket.get('id'), 'lead': lead_id,
+            'email': email or None, 'plan': plan, 'channel': channel}
+
+
+def _meeting_brief(data: dict, now: float | None = None) -> dict:
+    """Store the pre-meeting brief Sales promised; no calendar exists to book."""
+    from . import store
+
+    at = time.time() if now is None else float(now)
+    lead_id = _lead_id_of(data) or 'tanpa-id'
+    brief = {'lead': lead_id, 'when': data.get('when'), 'timezone': data.get('timezone'),
+             'needs': data.get('needs'), 'at': at}
+    store.context().set(f'brief:{lead_id}', brief, 'Support')
+    log.info('support: brief meeting lead %s (%s %s)', lead_id, brief['when'], brief['timezone'])
+    return {'action': 'briefed', 'lead': lead_id, 'brief': brief,
+            'calendar': None, 'calendar_reason': 'tidak ada integrasi kalender di fork ini'}

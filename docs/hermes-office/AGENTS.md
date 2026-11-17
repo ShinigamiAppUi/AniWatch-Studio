@@ -197,12 +197,25 @@ Aturan:
 **Key:** `Sales` · **Rumah:** Business Suite · **Tools:** `qualify_lead`, `draft_email`,
 `send_email`, `update_crm`, `schedule_meeting`
 **Trigger:** `new_lead`, `form_submit`, `deal_stage_change` (via Orchestrator); `@sales` di chat
-**Output:** email terkirim, CRM updated, meeting di kalender
+**Output:** lead tersimpan + diskor, surat terkirim (SMTP), handoff ke Marketing/Support
 **Handoff:** → Marketing (`lead_converted`: skor, nama, email) · → Support (`meeting_scheduled`:
 waktu, kebutuhan khusus)
 **Metric:** `leads_qualified`, `emails_sent`, `crm_updates`
-**Catatan:** email dan CRM adalah integrasi opsional — kalau `GOOGLE_*` / `HUBSPOT_API_KEY` kosong,
-agent berhenti dengan `agent_error` yang jelas, bukan diam.
+
+**Implementasi W8 sisa:** `hermes_agents/sales.py`.
+
+| Tool | Yang sebenarnya terjadi |
+| --- | --- |
+| `qualify_lead` | skor 0..1 dari payload saja (paket berbayar 0.30, anggaran ≥ Rp150rb 0.20 / ≥ Rp50rb 0.10, ≥10 karyawan 0.15, sumber referral/partner/community 0.15, domain non-mailbox 0.10, nama perusahaan 0.10). Tiap poin punya `{rule, points, detail}`; ambang `QUALIFY_MIN_SCORE = 0.5`. Tanpa LLM — skor yang tidak bisa dihitung ulang bukan metrik |
+| `update_crm` | `lead:<id>` di SharedContext; hasilnya `backend: shared_context` + alasan. **`HUBSPOT_API_KEY` tidak dibaca** — tidak ada panggilan CRM yang bisa diklaim |
+| `draft_email` / `send_email` | surat ucapan terima kasih lewat `mailer` (SMTP yang sama dengan Support). Tanpa `SMTP_HOST` → `sent: false` + alasan; lead tetap `qualified` |
+| `schedule_meeting` | handoff `Sales → Support meeting_scheduled`; **tidak ada** penulisan kalender (`GOOGLE_*` belum diintegrasikan) dan hasilnya menyebut itu |
+
+Trigger: `new_lead` & `form_submit` → skor, simpan, surat, handoff (kalau lolos ambang); kiriman
+form kedua untuk lead yang sudah `qualified` = `duplicate` tanpa surat/handoff kedua. `deal_stage_change`
+menerima `new`/`contacted`/`qualified`/`meeting`/`won`/`lost` plus alias (`closed_won` → `won`,
+`demo` → `meeting`); `meeting` tanpa `when`+`timezone` **ditolak utuh** (bukan setengah jalan), dan
+lead yang tidak ada di SharedContext ditolak dengan alasan. `/leads` membaca hasilnya.
 
 #### 📣 Marketing — Generic
 
@@ -220,6 +233,14 @@ ringkasan ke Discord kalau `DISCORD_WEBHOOK_URL` diisi. Setiap bagian laporan me
 angkanya (`local` atau `feed+local`); bagian tontonan menyatakan belum ada kalau `ANALYTICS_FEED`
 kosong. `draft_post`/`schedule_post` yang berdiri sendiri belum dipakai — belum ada penjadwal
 konten di luar episode.
+
+**Implementasi W8 sisa:** `MarketingAgent.onboard_lead()` adalah node yang menerima handoff
+`Sales → Marketing lead_converted`: satu surat selamat datang lewat `mailer`, satu catatan
+`campaign:<lead>` di SharedContext, lalu handoff `Marketing → Support customer_onboarding`
+(plan + channel). Satu lead hanya sekali dicoba dikirimi — konversi kedua (deal yang baru menutup
+setelah form-nya sudah qualified) menjawab `duplicate` dan tidak membuka tiket onboarding kedua.
+Tanpa `SMTP_HOST` suratnya `sent: false` dengan alasan yang tersimpan di `campaign:<lead>`; Support
+tetap menerima handoff-nya, karena follow-up manual justru yang dibutuhkan saat surat gagal.
 
 #### ⚙️ Ops — Generic
 

@@ -89,8 +89,10 @@ lewat daftar `GAUGE_KEYS`; jangan campur di satu payload.
 
 `tickets_resolved`, `tickets_pending` dan `sla_avg_response_min` dikirim Support setiap kali tiket
 berubah (W10); `sla_avg_response_min` yang `0` bersama `samples: 0` di `/sla` berarti belum ada
-balasan terkirim yang bisa diukur. `leads_qualified` dan `crm_updates` tetap 0 karena agent Sales
-belum ada (PLAN.md W8) — panel menampilkan 0, bukan angka karangan.
+balasan terkirim yang bisa diukur. `leads_qualified`, `crm_updates` dan `emails_sent` dikirim agent
+Sales dan Marketing sejak W8 sisa: `leads_qualified` hanya saat skor ≥ `QUALIFY_MIN_SCORE`,
+`emails_sent` hanya saat surat benar-benar keluar (SMTP), `crm_updates` tiap tulis `lead:<id>`.
+Tanpa kerja nyata angkanya 0, dan 0 tidak pernah diisi contoh.
 
 ---
 
@@ -394,7 +396,9 @@ Key yang dipakai (konvensi, bukan constraint):
 
 | Pola key | Penulis | Isi |
 | --- | --- | --- |
-| `lead:<id>` | Sales | skor, nama, email, status |
+| `lead:<id>` | Sales | skor + alasannya, nama, email, stage, sumber |
+| `campaign:<lead>` | Marketing | satu kali percobaan surat selamat datang: `sent`, alasan, plan, channel |
+| `brief:<lead>` | Support | brief sebelum meeting: `when`, `timezone`, `needs` |
 | `ticket:<id>` | Support | tiket + history percakapan |
 | `episode:<id>` | Scraper → QC | path, status pipeline, source alternatif |
 | `report:<id>` | UserReportAgent | kategori, episode, aksi |

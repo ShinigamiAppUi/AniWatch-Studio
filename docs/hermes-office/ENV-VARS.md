@@ -69,10 +69,10 @@ set nilai acak panjang — jangan kosongkan, dan jangan matikan verifikasi.
 
 | Variabel | Dipakai | Kalau kosong |
 | --- | --- | --- |
-| `GOOGLE_CLIENT_ID` | Sales, Support (Gmail API) | email tidak dikirim; agent melapor `agent_error` "email belum dikonfigurasi" |
-| `GOOGLE_CLIENT_SECRET` | idem | idem |
-| `GOOGLE_REFRESH_TOKEN` | idem | idem |
-| `HUBSPOT_API_KEY` | Sales (CRM) | `update_crm` jadi no-op + warning di log |
+| `GOOGLE_CLIENT_ID` | — (Gmail API belum diintegrasikan) | surat Sales/Support lewat SMTP (§3b); tanpa `SMTP_HOST` hasilnya `sent: false` + alasan |
+| `GOOGLE_CLIENT_SECRET` | — (idem) | idem |
+| `GOOGLE_REFRESH_TOKEN` | — (idem) | idem |
+| `HUBSPOT_API_KEY` | — (belum dibaca fork ini) | CRM = `lead:<id>` di SharedContext; `update_crm` menjawab `backend: shared_context` |
 | `NOTION_TOKEN` | `kb/ingest.py --source notion` | ingest Notion dinonaktifkan |
 | `DISCORD_WEBHOOK_URL` | SocialMedia, Notifier | post Discord dilewati |
 | `TELEGRAM_BOT_TOKEN` | SocialMedia, Notifier | post Telegram dilewati |

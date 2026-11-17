@@ -11,11 +11,12 @@ here. Two things live in this file:
    (docs/hermes-office/API-REFERENCE.md §4, fix Rev 3 #4).
 
 What a trigger does: the business work, through the agents that exist so far.
-`support_ticket`/`new_email` go to `hermes_agents.support` (triage -> KB -> reply
-or escalate), `user_report` to `hermes_agents.user_report`, the growth triggers to
-`analytics.py` / `marketing.py` / `social.py` / `retention.py` (W6), and
-`chargeback_received` to `finance.py` (W9), whose handoff to SecOps is followed
-right after.
+`new_lead`/`form_submit`/`deal_stage_change` go to `hermes_agents.sales` (score,
+store, acknowledge, hand off), `support_ticket`/`new_email` to
+`hermes_agents.support` (triage -> KB -> reply or escalate), `user_report` to
+`hermes_agents.user_report`, the growth triggers to `analytics.py` /
+`marketing.py` / `social.py` / `retention.py` (W6), and `chargeback_received` to
+`finance.py` (W9), whose handoff to SecOps is followed right after.
 A trigger with no tool yet only draws the two characters, which is honest: it
 was accepted, the work is not built. Work is called from here, never from the
 webhook route.
@@ -166,6 +167,13 @@ def _report_work(payload: object, char=None) -> dict:
     return handle_trigger(payload, char=char)
 
 
+def _sales_work(payload: object, char=None, trigger: str = '') -> dict:
+    """Sales needs to know *which* of its three triggers this is."""
+    from hermes_agents.sales import handle_trigger
+
+    return handle_trigger(trigger or 'new_lead', payload, char=char)
+
+
 def _analytics_work(payload: object, char=None) -> dict:
     from hermes_agents.analytics import handle_trigger
 
@@ -196,11 +204,13 @@ def _payment_work(payload: object, char=None) -> dict:
     return handle_trigger(payload, char=char)
 
 
-#: trigger -> the agent work that exists. Everything else only draws characters
-#: (`new_lead`/`form_submit`/`deal_stage_change` need the Sales agent, which no
-#: week has built - PLAN.md W8 leaves it open; `episode_released` announces
-#: through `pipeline.announce` after publishing).
+#: trigger -> the agent work that exists. `episode_released` is the one that
+#: only draws characters: it announces through `pipeline.announce` right after
+#: publishing, so a second announce here would post the episode twice.
 AGENT_HANDLERS = {
+    'new_lead': _sales_work,
+    'form_submit': _sales_work,
+    'deal_stage_change': _sales_work,
     'support_ticket': _support_work,
     'new_email': _support_work,
     'user_report': _report_work,
@@ -219,6 +229,8 @@ def _run_work(trigger: str, data: object, char=None) -> dict | None:
     if handler is None:
         return None
     try:
+        if handler is _sales_work:
+            return handler(data, char, trigger=trigger)
         return handler(data, char)
     except Exception as err:  # noqa: BLE001 - one bad trigger must not stop the sidecar
         log.exception('trigger=%s: kerja agent gagal: %s', trigger, err)
@@ -310,7 +322,7 @@ def _work_line(trigger: str, source: str, work: dict | None) -> str:
     if work.get('error'):
         return f'{trigger} gagal: {str(work["error"])[:60]}'
     action = work.get('action')
-    ref = work.get('ticket') or work.get('report') or work.get('order_id')
+    ref = work.get('ticket') or work.get('report') or work.get('order_id') or work.get('lead')
     if action:
         return f'{action} {ref} ({trigger})' if ref else f'{action} ({trigger})'
     if work.get('breaches') is not None:

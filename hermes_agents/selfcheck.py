@@ -1287,8 +1287,8 @@ def main() -> int:
 
     # /leads: the keys only exist if a Sales agent wrote them
     empty_leads = w7commands.handle_command('/leads', now=now)
-    check('w10: /leads says the Sales agent is the missing source',
-          empty_leads.get('ok') is True and 'Sales' in empty_leads.get('insufficient', '')
+    check('w10: /leads reports an empty day without inventing a lead',
+          empty_leads.get('ok') is True and 'tidak ada key lead:*' in empty_leads.get('insufficient', '')
           and 'Belum ada lead' in empty_leads.get('reply', ''), str(empty_leads)[:160])
     bstore.context().set('lead:sc-1', {'name': 'Budi', 'stage': 'qualified'}, 'selfcheck')
     one_lead = w7commands.handle_command('/leads', now=now)
@@ -1368,6 +1368,116 @@ def main() -> int:
                '/report-stats'} <= set(w7commands.COMMANDS)
           and all(w7commands.handle_command(name, now=now).get('handled') is True
                   for name in w7commands.COMMANDS))
+
+    # 14. W8 sisa: agent Sales + Marketing — lead, form, dan tahap deal --------
+    from hermes_agents import sales as sales_mod
+
+    sales_mailbox = _Mailbox()
+    lead_payload = {
+        'lead_id': 'sc-lead-1', 'name': 'Rina', 'email': 'rina@studio.co.id',
+        'plan': 'premium_plus', 'budget_idr': 200000, 'company': 'Studio Rina',
+        'company_size': 14, 'source': 'referral',
+    }
+    qualified = sales_mod.handle_trigger('new_lead', lead_payload, now=now,
+                                         transport=sales_mailbox)
+    lead_record = ctx.get('lead:sc-lead-1') or {}
+    check('w8: new_lead scores a lead from stated rules and stores it in lead:*',
+          qualified['action'] == 'qualified'
+          and qualified['score'] >= sales_mod.QUALIFY_MIN_SCORE
+          and len(qualified['reasons']) >= 3
+          and lead_record.get('stage') == 'qualified'
+          and lead_record.get('email') == 'rina@studio.co.id', str(qualified)[:200])
+    check('w8: a qualified lead gets one acknowledgement mail and one handoff to Marketing',
+          qualified['mail']['sent'] is True and len(sales_mailbox.sent) == 1
+          and qualified['handoff'] == 'handoff:sales:marketing:sc-lead-1'
+          and ho.get(qualified['handoff'], context=ctx) is not None,
+          f'{qualified.get("mail")} {qualified.get("handoff")}')
+    repeat_form = sales_mod.handle_trigger('form_submit', lead_payload, now=now,
+                                           transport=sales_mailbox)
+    check('w8: the same form twice does not mail, count, or hand off twice',
+          repeat_form['action'] == 'duplicate' and len(sales_mailbox.sent) == 1
+          and len(ho.pending_from('Sales', context=ctx)) == 1, str(repeat_form)[:160])
+
+    weak = sales_mod.handle_trigger('form_submit',
+                                    {'name': 'Budi', 'email': 'budi@gmail.com',
+                                     'source': 'web'}, now=now, transport=sales_mailbox)
+    check('w8: a form with weak signal is nurtured, not handed to Marketing',
+          weak['action'] == 'nurture' and weak['score'] < sales_mod.QUALIFY_MIN_SCORE
+          and weak.get('handoff') is None and weak.get('mail') is None
+          and len(sales_mailbox.sent) == 1, str(weak)[:160])
+
+    chain = orch.follow_handoffs('Sales')
+    campaign = ctx.get('campaign:sc-lead-1') or {}
+    onboarding = con.execute(
+        "SELECT id, user_id, status FROM tickets WHERE subject LIKE 'Onboarding%' "
+        'ORDER BY received_at DESC LIMIT 1').fetchone()
+    check('w8: Sales -> Marketing -> Support runs on the real agents',
+          [(hop['from'], hop['to']) for hop in chain]
+          == [('Sales', 'Marketing'), ('Marketing', 'Support')]
+          and campaign.get('lead') == 'sc-lead-1' and onboarding is not None
+          and onboarding['user_id'] == 'rina@studio.co.id', f'{chain} {campaign} {onboarding}')
+    check('w8: Marketing reports the missing SMTP instead of claiming a welcome letter',
+          campaign.get('sent') is False and 'SMTP' in str(campaign.get('reason')),
+          str(campaign)[:160])
+    check('w8: the chain consumed both handoffs',
+          ho.pending(context=ctx) == {}, str(list(ho.pending(context=ctx))))
+
+    meeting = sales_mod.handle_trigger(
+        'deal_stage_change',
+        {'lead_id': 'sc-lead-1', 'stage': 'meeting', 'when': '2026-11-18T10:00:00+07:00',
+         'timezone': 'Asia/Jakarta', 'needs': 'demo paket premium_plus'}, now=now)
+    brief_chain = orch.follow_handoffs('Sales')
+    brief = ctx.get('brief:sc-lead-1') or {}
+    check('w8: a meeting writes the Sales -> Support handoff Support briefs',
+          meeting['action'] == 'stage_changed' and meeting['stage'] == 'meeting'
+          and [(hop['from'], hop['to']) for hop in brief_chain] == [('Sales', 'Support')]
+          and brief.get('timezone') == 'Asia/Jakarta'
+          and brief.get('needs') == 'demo paket premium_plus', f'{meeting} {brief_chain} {brief}')
+    no_slot = sales_mod.handle_trigger('deal_stage_change',
+                                       {'lead_id': 'sc-lead-1', 'stage': 'meeting'}, now=now)
+    check('w8: a meeting without when/timezone is refused, not half-written',
+          no_slot['action'] == 'refused' and 'when' in no_slot.get('reason', '')
+          and (ctx.get('lead:sc-lead-1') or {}).get('stage') == 'meeting', str(no_slot))
+
+    won = sales_mod.handle_trigger('deal_stage_change',
+                                   {'lead_id': 'sc-lead-1', 'stage': 'closed_won'}, now=now)
+    check('w8: closed_won is an alias for won, and hands the lead to Marketing',
+          won['action'] == 'stage_changed' and won['stage'] == 'won'
+          and won['handoff'] == 'handoff:sales:marketing:sc-lead-1'
+          and (ctx.get('lead:sc-lead-1') or {}).get('status') == 'converted', str(won)[:200])
+    repeat_chain = orch.follow_handoffs('Sales')
+    check('w8: a second conversion does not send a second welcome letter',
+          len(repeat_chain) == 1 and repeat_chain[0]['work'].get('duplicate') is True
+          and ho.pending(context=ctx) == {}, str(repeat_chain)[:200])
+
+    unknown_stage = sales_mod.handle_trigger('deal_stage_change',
+                                             {'lead_id': 'sc-lead-1', 'stage': 'teleported'}, now=now)
+    unknown_lead = sales_mod.handle_trigger('deal_stage_change',
+                                            {'lead_id': 'sc-tidak-ada', 'stage': 'contacted'}, now=now)
+    check('w8: an unknown stage or an unknown lead is refused with the reason',
+          unknown_stage['action'] == 'refused' and 'won' in unknown_stage.get('allowed', [])
+          and unknown_lead['action'] == 'refused'
+          and 'tidak ada di SharedContext' in unknown_lead.get('reason', ''),
+          f'{unknown_stage} {unknown_lead}'[:200])
+
+    leads_reply = w7commands.handle_command('/leads', now=now)
+    check('w8: /leads lists what the Sales agent wrote, with stage and score',
+          leads_reply.get('ok') is True and 'lead:sc-lead-1' in leads_reply.get('leads', [])
+          and 'won' in leads_reply.get('reply', '')
+          and 'skor' in leads_reply.get('reply', ''), str(leads_reply)[:200])
+    via_webhook = w4triggers.run_trigger(
+        'new_lead', {'name': 'Tono', 'email': 'tono@kedai.id', 'plan': 'premium',
+                     'budget_idr': 75000}, source='selfcheck')
+    check('w8: the new_lead trigger path runs Sales and follows its chain headless',
+          (via_webhook.get('work') or {}).get('action') == 'qualified'
+          and [(hop['from'], hop['to']) for hop in via_webhook.get('chain') or []]
+          == [('Sales', 'Marketing'), ('Marketing', 'Support')]
+          and via_webhook.get('office') is False, str(via_webhook)[:240])
+    check('w8: the three Sales triggers run the agent, and Sales/Marketing are graph nodes',
+          all(w4triggers.AGENT_HANDLERS.get(name) is w4triggers._sales_work
+              for name in ('new_lead', 'form_submit', 'deal_stage_change'))
+          and {'Sales', 'Marketing'} <= set(orch.build_orchestrator_graph().node_names),
+          str(sorted(orch.build_orchestrator_graph().node_names)))
 
     support.close()
 

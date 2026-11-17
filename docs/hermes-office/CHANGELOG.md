@@ -1,5 +1,44 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 4.1 — 17 Nov 2026 (W8 sisa: agent Sales + Marketing)
+
+### Ditambahkan
+
+- `hermes_agents/sales.py`: SalesAgent dengan tiga trigger yang sebelumnya hanya menggambar karakter
+  — `new_lead`, `form_submit`, `deal_stage_change`. `qualify_lead()` memberi skor 0..1 dari payload
+  saja dengan satu alasan per poin (`{rule, points, detail}`), ambang `QUALIFY_MIN_SCORE = 0.5`;
+  `update_crm()` menulis `lead:<id>` di SharedContext (bukan HubSpot); `send_email()` lewat SMTP
+  `mailer` yang sama dengan Support; `schedule_meeting()` hanya menulis handoff (tidak ada kalender).
+  Form ganda = `duplicate` tanpa surat/handoff kedua; `meeting` tanpa `when`+`timezone` ditolak utuh;
+  `closed_won`/`demo` dipetakan ke stage resmi, stage asing ditolak beserta daftarnya.
+- `hermes_agents/marketing.py`: `onboard_lead()` — node untuk handoff `lead_converted`: satu surat
+  selamat datang, catatan `campaign:<lead>`, lalu handoff `customer_onboarding` ke Support. Konversi
+  kedua menjawab `duplicate`; surat yang gagal menyimpan alasannya dan tetap diteruskan ke Support.
+- `hermes_agents/support.py`: `receive_handoff()` — `onboarding_followup` menjadi tiket nyata
+  (`channel='onboarding'`), `pre_meeting_brief` menjadi `brief:<lead>`.
+- `hermes_agents/orchestrator.py`: node `Sales`, node `Marketing` (kampanye vs laporan mingguan
+  dibedakan lewat `expects`), dan node `Support` yang membedakan handoff dari trigger.
+
+### Diubah
+
+- `webhook_server/triggers.py`: `AGENT_HANDLERS` memetakan `new_lead`/`form_submit`/
+  `deal_stage_change` ke `_sales_work`; bubble menyebut id lead. Komentar "agent Sales belum ada"
+  dihapus karena agent-nya sekarang ada.
+- `/leads` menampilkan tahap + skor dan, untuk hari kosong, menyebut trigger yang menulis `lead:*`
+  (bukan lagi "agent belum ada").
+- Selfcheck: **208 PASS / 0 FAIL** (15 cek baru — rantai Sales → Marketing → Support pada agent
+  sungguhan, form ganda, lead lemah tidak di-handoff, meeting + brief, konversi kedua tanpa surat
+  kedua, penolakan stage/lead tak dikenal, jalur `run_trigger` headless, dan wiring ketiga trigger).
+- PLAN W8 (checkbox karakter + status), AGENTS §4.1 (kartu Sales + Marketing), AGENT-HANDOFFS §7/§8,
+  API-REFERENCE §4/§6, DB-SCHEMA §11 diperbarui dalam commit yang sama.
+
+### Catatan
+
+- Tidak ada integrasi yang dipalsukan: `HUBSPOT_API_KEY` tidak dibaca, `GOOGLE_*` tidak dipakai,
+  dan tanpa `SMTP_HOST` surat Sales/Marketing pulang sebagai `sent: false` beserta alasannya.
+
+---
+
 ## Rev 4.0 — 17 Nov 2026 (W10: dashboard, SLA live, sisa slash command)
 
 ### Ditambahkan

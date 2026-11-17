@@ -226,10 +226,19 @@ lulus.
 - [x] Rantai nyata hari ini: `Support → Orchestrator` (`ticket_unresolved`). `SupportAgent.escalate`
   kini menulis handoff, `run_trigger` langsung mengikutinya, dan Orchestrator mencatat
   `escalation:<ticket>` untuk manusia — tanpa memblokir worker dengan kartu izin.
-- [ ] Karakter Sales/Marketing: protocol-nya lulus di selfcheck dengan tiga node (termasuk payload
-  yang berpindah), tapi **agent** Sales dan Marketing baru ada di W6 — jadi "tiga karakter muncul
-  berurutan" belum bisa dibuktikan di kantor. Yang terbukti: tiga node berjalan berurutan dan
-  `handoff:*` kosong lagi setelahnya.
+- [x] Karakter Sales/Marketing: `hermes_agents/sales.py` (skor beralasan, `lead:*`, surat SMTP,
+  handoff) + `MarketingAgent.onboard_lead()` (surat selamat datang, `campaign:<lead>`, handoff ke
+  Support) + `support.receive_handoff()` (tiket onboarding / `brief:<lead>`). Trigger `new_lead`,
+  `form_submit`, dan `deal_stage_change` kini menjalankan kerja, bukan hanya menggambar karakter.
+  Selfcheck §14 (15 cek): rantai Sales → Marketing → Support berjalan pada agent sungguhan,
+  `handoff:*` kosong setelahnya, dan tiap batasnya dinyatakan (SMTP kosong → surat dilewati dengan
+  alasan, kalender tidak ada, CRM = SharedContext).
+
+**Status W8 (lanjutan):** selesai. Total selfcheck **208 PASS / 0 FAIL** — 193 sebelum bagian ini,
+15 cek baru untuk Sales/Marketing. Yang **tidak** dipalsukan: `HUBSPOT_API_KEY` tidak dibaca (CRM
+adalah `lead:*` di SharedContext dan hasilnya menyebut `backend: shared_context`), `GOOGLE_*` tidak
+dipakai (meeting hanya ada sebagai handoff + `brief:<lead>`), dan surat tanpa `SMTP_HOST` pulang
+sebagai `sent: false` beserta alasannya — lead tetap `qualified`, suratnya yang tidak terkirim.
 
 ### W9 — Finance, Legal, Security
 
@@ -299,8 +308,8 @@ manual kecuali approval.
   `premium_items` tidak punya kolom penjualan, jadi command menyebutkan itu dan hanya melaporkan
   jumlah item live/dicabut. Mengurutkan item berdasarkan harga lalu menyebutnya "terlaris" akan jadi
   satu-satunya laporan palsu di kantor.
-- **`/leads` bergantung pada agent Sales yang belum ada** (W8 di atas). Command membaca `lead:*` di
-  SharedContext dan, bila kosong, mengatakan bahwa agent-nya belum ada.
+- **`/leads` membaca `lead:*` yang ditulis agent Sales** (W8 sisa, sesudah W10). Command
+  menampilkan tahap + skor per lead; hari tanpa lead dikatakan kosong, bukan diisi contoh.
 
 **Verifikasi W10:** selfcheck **193 PASS / 0 FAIL** (17 cek W10: SLA dari respons pertama, migrasi
 kolom lama, `/biz` lewat HTTP sungguhan + kantor mati, satu lead nyata, `/topselling` jujur, insiden

@@ -76,9 +76,15 @@ def escalate_to_human(payload: object, now: float | None = None) -> dict:
 def _default_handler(role: str) -> Node | None:
     """The agent that actually does `role`'s work, when it exists (W3-W5)."""
     if role == 'Support':
-        from .support import handle_trigger
+        from .support import handle_trigger, receive_handoff
 
-        return lambda data: handle_trigger(data)
+        # Two jobs on one desk: a ticket trigger, or a handoff Support was
+        # promised (onboarding follow-up / pre-meeting brief). `expects` is what
+        # the envelope carries, so the node knows which one it received.
+        return lambda data: (receive_handoff(data)
+                             if str((data or {}).get('expects') or '') in
+                             ('onboarding_followup', 'pre_meeting_brief')
+                             else handle_trigger(data))
     if role == 'UserReportAgent':
         from .user_report import handle_trigger
 
@@ -99,6 +105,18 @@ def _default_handler(role: str) -> Node | None:
         from .dmca import cancel_from_takedown
 
         return cancel_from_takedown
+    if role == 'Sales':
+        from .sales import handle_trigger as handle_sales
+
+        return lambda data: handle_sales(str(data.get('trigger') or 'new_lead'), data)
+    if role == 'Marketing':
+        from .marketing import handle_trigger as weekly_report
+        from .marketing import onboard_lead
+
+        # A chain hop is the welcome campaign; a trigger is the weekly report.
+        return lambda data: (onboard_lead(data)
+                             if str((data or {}).get('expects') or '') == 'welcome_email_campaign'
+                             else weekly_report(data))
     if role == 'Orchestrator':
         return lambda data: escalate_to_human(data)
     return None
@@ -200,7 +218,11 @@ def run_orchestrator(trigger: str, data: object = None, source: str = 'webhook',
 
     role = route_trigger(trigger)
     graph = build_orchestrator_graph(handlers)
-    result = graph.invoke(role, data if isinstance(data, dict) else {})
+    # A node that serves three triggers (Sales) needs to know which one it is
+    # running; the graph only knows the role, so the trigger travels in the payload.
+    payload = dict(data) if isinstance(data, dict) else {}
+    payload.setdefault('trigger', trigger)
+    result = graph.invoke(role, payload)
     log.info('orchestrator: trigger=%s source=%s route=%s hops=%d',
              trigger, source, role, len(result['chain']))
     return {'trigger': trigger, 'source': source, **result}

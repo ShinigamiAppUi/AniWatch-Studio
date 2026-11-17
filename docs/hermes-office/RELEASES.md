@@ -95,13 +95,15 @@ Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
 > membatalkan lewat handoff ke EpisodeScheduler, SecOps dengan `security_incidents`, dan
 > `/webhook/payment` yang benar-benar menjalankan agent — plus tujuh command finance/legal/security.
 > W10 ditutup (Rev 4.0): 13 command terakhir, gauge SLA dari `first_response_at`, dan `/biz` yang
-> membaca `GET /biz-metrics` milik kantor. Tag tetap menunjuk commit rilis pertama; catatan
-> lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5–4.0.
+> membaca `GET /biz-metrics` milik kantor. W8 ditutup (Rev 4.1): agent Sales + Marketing, sehingga
+> `new_lead`, `form_submit`, dan `deal_stage_change` menjalankan kerja dan meneruskan rantai ke
+> Support. Tag tetap menunjuk commit rilis pertama; catatan lengkapnya di
+> [CHANGELOG.md](CHANGELOG.md) Rev 3.5–4.1.
 >
-> **Masih belum ada setelah W10:** agent Sales dan Marketing (PLAN.md W8), sehingga `new_lead`,
-> `form_submit`, `deal_stage_change` hanya menggambar karakter; tidak ada penjualan per item, jadi
-> `/topselling` tidak punya ranking; belum ada endpoint purge CDN. Semuanya disebut di jawaban
-> command atau hasil agent yang bersangkutan, bukan disembunyikan.
+> **Masih belum ada:** tidak ada penjualan per item, jadi `/topselling` tidak punya ranking; belum
+> ada endpoint purge CDN; tidak ada integrasi CRM/Google Calendar (Sales menulis SharedContext dan
+> handoff, bukan HubSpot/kalender). Semuanya disebut di jawaban command atau hasil agent yang
+> bersangkutan, bukan disembunyikan.
 
 ### Cara menjalankan
 
