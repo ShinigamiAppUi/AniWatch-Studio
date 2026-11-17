@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS premium_items (
     tier           TEXT,                    -- basic | premium | deluxe
     price_idr      INTEGER,
     -- draft | qa_passed | priced | previewed | pending_approval | approved | rejected | live
+    -- | revoked (chargeback, W9: taken out of the store, row kept as the record)
     status         TEXT DEFAULT 'draft',
     created_at     REAL NOT NULL,
     updated_at     REAL
@@ -145,3 +146,35 @@ CREATE TABLE IF NOT EXISTS context (
     ts    REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_context_ts ON context (ts);
+
+-- 16. Security incidents (SecOps, DB-SCHEMA.md §16) -------------------------
+-- Append-only: every action is a row, and `unban` is a new row, never a delete
+-- (SECURITY.md §10 - audit yang bisa dihapus oleh agent bukan audit).
+CREATE TABLE IF NOT EXISTS security_incidents (
+    id         TEXT PRIMARY KEY,            -- sc-xxxxxxxxxx
+    rule       TEXT NOT NULL,               -- login_attempts | concurrent_devices | request_rate | chargeback_count | manual
+    target     TEXT NOT NULL,               -- ip or user_id
+    action     TEXT NOT NULL,               -- ban_ip | soft_lock | rate_limit | flag_account | unban
+    reason     TEXT,
+    actor      TEXT NOT NULL,               -- 'SecOps', or a person for /unban
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_target  ON security_incidents (target, created_at);
+CREATE INDEX IF NOT EXISTS idx_incidents_created ON security_incidents (created_at);
+
+-- 17. DMCA requests (DMCA, DB-SCHEMA.md §17) -------------------------------
+-- Evidence is never deleted: refused, duplicate and unknown-episode requests
+-- stay here with the outcome that was reached.
+CREATE TABLE IF NOT EXISTS dmca_requests (
+    id         TEXT PRIMARY KEY,            -- dmca-xxxxxxxxxx
+    episode_id TEXT,
+    anime_id   TEXT,
+    requester  TEXT NOT NULL,
+    reason     TEXT,
+    evidence   TEXT,
+    status     TEXT DEFAULT 'received',     -- received | cancelled | unpublished | duplicate | unknown_episode | refused
+    detail     TEXT,
+    created_at REAL NOT NULL,
+    handled_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_dmca_episode ON dmca_requests (episode_id, created_at);

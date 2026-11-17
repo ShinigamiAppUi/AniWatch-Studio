@@ -78,8 +78,8 @@ dengan DMCA cancel yang menang balapan dan penjaga duplikat. 37 cek lama di self
 | W5 sisa | ~~`email_check`, OpsAgent, Subtitle + Moderator~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.5 |
 | W7 | ~~DesignAgent (premium)~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.8 |
 | W8 | ~~`run_orchestrator`, protokol handoff, `handoff_check`~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.6 |
-| W9 | Finance, Legal, Security: refund/chargeback end-to-end, DMCA otomatis |
-| W10 | Dashboard lengkap, slash command sisanya |
+| W9 | ~~Finance, Legal, Security: refund/chargeback end-to-end, DMCA otomatis~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.9 |
+| W10 | Dashboard lengkap, slash command sisanya (`/biz`, `/leads`, `/tickets`, `/sla`, `/topselling`, `/incidents`, `/unban`, `/schedule`, `/embargo`, `/translations`, `/approve-sub`, `/reports`, `/report-stats`) |
 
 Job yang belum ada tercatat di `GET /health` → `pending_jobs`, bukan dijalankan sebagai no-op.
 Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
@@ -90,9 +90,12 @@ Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
 > job `handoff_check`. W6 ditutup (Rev 3.7): lima agent growth, `CacheWarmer`, laporan mingguan
 > Marketing, dan tiga job terakhir — `pending_jobs` kini kosong, sebelas job berjalan. W7 ditutup
 > (Rev 3.8): pipeline premium (design → QA → harga → preview → approval → live) dan tiga slash
-> command pertamanya (`/design`, `/pending-items`, `/approve`) lewat `POST /command`. Yang tetap
-> belum ada sesudahnya: Finance/Legal/Security (W9) dan dashboard (W10). Tag tetap menunjuk commit
-> rilis pertama; catatan lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5–3.8.
+> command pertamanya (`/design`, `/pending-items`, `/approve`) lewat `POST /command`. W9 ditutup
+> (Rev 3.9): PaymentAgent + RevenueTracker (grace, refund ber-kartu, chargeback → SecOps), DMCA yang
+> membatalkan lewat handoff ke EpisodeScheduler, SecOps dengan `security_incidents`, dan
+> `/webhook/payment` yang benar-benar menjalankan agent — plus tujuh command finance/legal/security.
+> Yang tetap belum ada sesudahnya: dashboard dan sisa slash command (W10). Tag tetap menunjuk
+> commit rilis pertama; catatan lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5–3.9.
 
 ### Cara menjalankan
 

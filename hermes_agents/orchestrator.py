@@ -18,9 +18,11 @@ library would add a dependency and hide the rule that matters (only handoffs in
 AGENT-HANDOFFS.md §3 exist).
 
 The graph follows a handoff by *taking* it: one handoff, one recipient
-(AGENT-HANDOFFS.md §5.1). A node whose agent is not built yet (W6-W9) reports
-`skipped` and the chain stops there - honest, and nothing is invented on its
-behalf.
+(AGENT-HANDOFFS.md §5.1). A node whose agent is not built yet reports `skipped`
+and the chain stops there - honest, and nothing is invented on its behalf. W9
+fills in the money side: PaymentAgent, RevenueTracker, SecOps and
+EpisodeScheduler are nodes now, so a chargeback and a takedown are two visible
+hops instead of a note in the code.
 """
 
 from __future__ import annotations
@@ -81,6 +83,22 @@ def _default_handler(role: str) -> Node | None:
         from .user_report import handle_trigger
 
         return lambda data: handle_trigger(data)
+    if role == 'PaymentAgent':
+        from .finance import handle_trigger
+
+        return lambda data: handle_trigger(data)
+    if role == 'RevenueTracker':
+        from .finance import record_transaction
+
+        return record_transaction
+    if role == 'SecOps':
+        from .sec_ops import flag_account_node
+
+        return flag_account_node
+    if role == 'EpisodeScheduler':
+        from .dmca import cancel_from_takedown
+
+        return cancel_from_takedown
     if role == 'Orchestrator':
         return lambda data: escalate_to_human(data)
     return None
@@ -113,8 +131,8 @@ class OrchestratorGraph:
     def _run(self, role: str, data: dict) -> dict | None:
         node = self.nodes.get(role)
         if node is None:
-            log.info('orchestrator: %s belum punya agent (W6-W9) - berhenti di sini', role)
-            return {'skipped': f'{role} belum punya agent (W6-W9)'}
+            log.info('orchestrator: %s belum punya agent - berhenti di sini', role)
+            return {'skipped': f'{role} belum punya agent'}
         return node(data)
 
     def follow_chain(self, role: str, now: float | None = None) -> list[dict]:
@@ -156,8 +174,12 @@ def build_orchestrator_graph(handlers: dict[str, Node] | None = None, context=No
     """
     from webhook_server.triggers import TRIGGER_ROLES
 
+    # Handoff recipients are nodes too: W9's DMCA -> EpisodeScheduler and
+    # PaymentAgent -> RevenueTracker/SecOps only appear in the graph because of
+    # the transition table, and a recipient without an agent stays `skipped`.
+    recipients = {to_role for (_, to_role, _) in handoff.HANDOFF_TABLE}
     nodes: dict[str, Node] = {}
-    for role in sorted(set(TRIGGER_ROLES.values()) | {'Orchestrator'}):
+    for role in sorted(set(TRIGGER_ROLES.values()) | recipients | {'Orchestrator'}):
         node = (handlers or {}).get(role) or _default_handler(role)
         if node is not None:
             nodes[role] = node

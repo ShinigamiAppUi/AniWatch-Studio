@@ -556,6 +556,14 @@ mengubah apa pun — item tetap `pending_approval` supaya `/approve` masih bisa 
 **Output:** laporan revenue harian/mingguan, alert anomali
 **Slash:** `/revenue`, `/topselling`
 
+**Implementasi W9:** `hermes_agents/finance.py`. `record_transaction()` adalah node graph-nya:
+handoff `payment_settled` masuk, lalu snapshot ditulis ke
+`media/published/revenue/YYYY-MM-DD.json`. Angkanya dari `payment_events` saja, **satu baris per
+`order_id`** (status baris terbaru), jadi order yang di-chargeback tidak dihitung dua kali. Dua
+aturan anomali, keduanya bisa diperiksa: `refund_rate > 20%` (hanya kalau ≥ 5 order berbayar dalam 7
+hari — persentase dari tiga order adalah derau, jadi nilainya `None`) dan `chargebacks ≥ 2` dalam 7
+hari. `/topselling` masih rencana W10 karena penjualan per item belum punya sumber data.
+
 #### 💳 PaymentAgent
 
 **Key:** `PaymentAgent` · **Tools:** `handle_success`, `handle_failure`, `retry_subscription`,
@@ -576,6 +584,22 @@ mengubah apa pun — item tetap `pending_approval` supaya `/approve` masih bisa 
 **Schema:** `payment_events`, `subscription_status` (DB-SCHEMA.md §7). Idempoten: `INSERT OR IGNORE`
 atas `payment_events.id` — notifikasi ganda tidak boleh menghasilkan refund ganda.
 
+**Implementasi W9:** `hermes_agents/finance.py`.
+
+| Event | Fungsi | Hasil yang bisa diperiksa |
+| --- | --- | --- |
+| `settlement`/`capture` | `handle_success()` | baris `subscription_status` (plan, `retry_count=0`, `grace_until NULL`) + handoff `payment_settled` |
+| `deny`/`cancel`/`expire`/`failure` | `handle_failure()` | `retry_count+1`; < 2 → `grace_until = now + 3 hari` + surat saran metode lain; ≥ 2 → plan `free`, `subscriptions_lost` |
+| `refund_request` | `refund_request()` → `request_refund_approval()` | baris `pending` di `payment_events`; kartu Approve/Tolak/Minta Info (24 jam); Approve → `refunded` + `refunds_processed`, Tolak → `failed`, timeout tidak mengubah apa pun |
+| `chargeback` | `flag_chargeback()` | baris `chargeback`, item `item_id` → `revoked`, `chargebacks`, handoff → SecOps |
+| `refund` dari provider | `refund_completed()` | permintaan kita ditutup; **tidak** menambah `refunds_processed` karena keputusan itu bukan milik kita |
+
+`refund_request` bukan status Midtrans: itu cara refund **diminta** lewat pintu yang sama
+(`POST /webhook/payment`), sehingga jalur permintaan ikut terverifikasi signature. `subscription_status`
+hanya ditulis dua fungsi di tabel ini — itulah yang membuat segmen `retention.py` punya sumber nyata.
+Pencabutan item jujur soal batasnya: `premium_items` tidak menyimpan pemilik, jadi hanya `item_id`
+yang disebut di notifikasi yang bisa dicabut.
+
 #### ⚖️ DMCA
 
 **Key:** `DMCA` · **Tools:** `verify_request`, `unpublish_episode`, `purge_cdn`
@@ -583,6 +607,15 @@ atas `payment_events.id` — notifikasi ganda tidak boleh menghasilkan refund ga
 `cancel_schedule` kalau belum live
 **Handoff:** → EpisodeScheduler (`takedown`: episode_id/anime_id, rentang)
 **Aturan:** bukti permintaan tidak pernah dihapus, hanya status yang berubah.
+
+**Implementasi W9:** `hermes_agents/dmca.py`. Pintunya `/takedown [episode_id] [alasan]` di chat —
+fork ini **tidak** menambah trigger webhook ke-14; nota takedown datang lewat email/pos dan seseorang
+menjalankan command itu. Urutannya: verifikasi (`episode_id`, `requester`, `reason`) → catat di
+`dmca_requests` (termasuk yang ditolak) → handoff `DMCA → EpisodeScheduler` → node EpisodeScheduler
+memanggil `cancel_schedule` (belum live, atomik `WHERE status='scheduled'`) atau unpublish (sudah
+live, baris tetap ada). Keterbatasan yang ditulis, bukan disembunyikan: takedown per anime
+(`anime_id` saja) ditolak karena fork ini menjadwalkan per `episode_id`, dan `cdn_purged` selalu
+`false` dengan alasannya.
 
 #### 🔐 SecOps
 
@@ -601,6 +634,15 @@ atas `payment_events.id` — notifikasi ganda tidak boleh menghasilkan refund ga
 
 **Aturan event:** `agent_working` hanya dikirim saat **ada** pelanggaran. Loop 10 detik yang
 mengirim event tiap putaran akan membanjiri kantor (PLAN.md §Risiko).
+
+**Implementasi W9:** `hermes_agents/sec_ops.py`. `monitor()` menjalankan empat rule di atas dan
+menulis satu baris `security_incidents` per aksi (append-only; `/unban` menambah baris `unban`, bukan
+menghapus). Sumber event menentukan kejujurannya: `login_attempts`, `concurrent_devices` dan
+`request_rate` membaca `SECURITY_EVENT_FEED` (JSONL akses) — fork ini tidak punya access log sendiri,
+jadi tanpa file itu `insufficient` menyebutnya dan `violations` kosong, bukan "traffic bersih".
+`chargeback_count` dibaca dari `payment_events`, jadi rule itu bekerja di instalasi kosong.
+`char.update` hanya dipanggil kalau ada pelanggaran baru, dan rule+target yang sama dalam 300 dtk
+adalah satu insiden, bukan aliran event.
 
 ---
 

@@ -65,3 +65,8 @@ def recommendation_db() -> str:
 def seo_site_url() -> str:
     """Public origin for sitemap/meta links, when the site is not the CDN."""
     return (os.environ.get('SEO_SITE_URL') or '').strip().rstrip('/')
+
+
+def security_event_feed() -> str:
+    """Access-event JSONL for SecOps (W9); empty means the request rules cannot run."""
+    return (os.environ.get('SECURITY_EVENT_FEED') or '').strip()

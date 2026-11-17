@@ -73,6 +73,11 @@ sekarang kerjanya ada di `webhook_server/jobs.py`:
 | `cache_warmer` | `run_cache_warmer` | tiap hari 17.00; episode live terbaru di-`GET` dari `CDN_BASE_URL`; tanpa CDN → `warmed: 0` + alasan |
 | `recommendation_batch` | `run_recommendation_batch` | Minggu 22.00; co-view dari `ANALYTICS_FEED`, ditulis ke `RECOMMENDATION_DB` (tabel `recommendations`) atau `media/published/recommendations.jsonl` |
 
+W9 tidak menambah job: PaymentAgent bekerja dari `POST /webhook/payment`, DMCA dari `/takedown`, dan
+SecOps dari `SECURITY_EVENT_FEED` saat dipanggil — bukan dari putaran scheduler. Memasang loop
+detik untuk SecOps justru akan membanjiri kantor (PLAN.md §Risiko), jadi kesebelas job di §2 tetap
+kesebelas.
+
 `PENDING_JOBS` tetap ada dan **kosong** sekarang. Itu memang gunanya: job yang kerjanya belum ada
 ditulis di sana beserta alasannya, `start_scheduler()` menulis satu baris per entri saat start, dan
 `GET /health` mengembalikannya di `pending_jobs` — jadi yang belum ada terlihat sebagai belum ada,

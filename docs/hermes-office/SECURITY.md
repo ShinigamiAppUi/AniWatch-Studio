@@ -133,6 +133,13 @@ Implementasi: setiap agent hanya meng-import tool yang ia butuhkan, dan tool yan
 publikasi wajib lewat `agent_waiting` + `wait_for_approval`. Ini bukan sekadar konvensi — reviewer
 menolak PR yang memberi `process_refund` ke agent lain.
 
+W9 memegang baris-baris itu di satu tempat: `finance.decide_refund()` adalah **satu-satunya** penulis
+status refund (dipakai kartu dan tidak ada pintu lain), `refund_request()` menolak di luar jendela 7
+hari, dan `premium.revoke_item()` hanya bisa mencabut item berstatus `live` yang disebut namanya.
+`SecOps` tidak pernah menghapus akun atau mengubah role: `apply_rule()` hanya menambah baris
+`security_incidents`, dan `unban` adalah baris baru. `dmca.py` hanya menulis `dmca_requests` dan
+`episode_schedule.cancel_reason`, tidak pernah menghapus baris permintaan.
+
 ---
 
 ## 8. Penanganan input
@@ -168,8 +175,8 @@ Routing tetap ditentukan `route_trigger()`, bukan isi pesan.
 | --- | --- | --- |
 | Trigger masuk | log sidecar `trigger=<type> source=<source>` | log file |
 | Approval diputuskan | `payment_events` / `premium_items` + log | permanen (DB) |
-| Takedown DMCA | log DMCA + status `cancelled` | permanen |
-| Pelanggaran SecOps | log incident + aksi | 30 hari |
+| Takedown DMCA | `dmca_requests` (append-only) + status `cancelled` | permanen |
+| Pelanggaran SecOps | `security_incidents` (append-only) + log | 30 hari |
 | Event gagal | `dlq` (dengan `attempts`, `last_err`) | sampai manual |
 
 Audit yang bisa dihapus oleh agent bukan audit. `dmca.py` dan `sec_ops.py` hanya menambah baris,

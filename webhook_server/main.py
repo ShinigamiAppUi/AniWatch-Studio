@@ -10,8 +10,11 @@ jobs:
   trigger is handed to a worker thread, which draws the Orchestrator and then the
   role the trigger belongs to. An unmapped type is a 400, never a fallback.
 - `POST /webhook/payment` - Midtrans notification, verified with SHA-512 over
-  `order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY` and recorded once
-  per notification (`webhook_server/payments.py`).
+  `order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY`, recorded once per
+  notification (`webhook_server/payments.py`) and then handed to PaymentAgent
+  (`hermes_agents/finance.py`, W9), whose handoff to RevenueTracker or SecOps is
+  followed in the same call. A `refund_request` blocks on a card, so only that
+  one is raised in a worker thread.
 - `POST /command` (W7) - the chat's business slash commands, relayed by
   `server/biz-events.js`. Loopback-only, like `/approval-callback`.
 - `GET /health` - also lists the scheduler's jobs, and the ones waiting on W5-W9.
@@ -162,6 +165,27 @@ def _request_approval(item_id: str) -> None:
     premium.request_approval(item_id)
 
 
+def _process_payment(payload: dict) -> dict:
+    """PaymentAgent's work for one verified notification, plus its handoff chain.
+
+    `handle_payment_webhook` returns a value for every status, so a notification
+    that changes nothing (an unknown status, a missing order id) is a log line
+    and a `reason` rather than an exception in a worker thread.
+    """
+    from hermes_agents import finance
+
+    result = finance.handle_payment_webhook(payload)
+    if result.get('action') == 'refund_requested' and result.get('order_id'):
+        result['approval'] = finance.request_refund_approval(str(result['order_id']))
+    try:
+        from hermes_agents.orchestrator import follow_handoffs
+
+        result['chain'] = follow_handoffs('PaymentAgent')
+    except Exception as err:  # noqa: BLE001 - the payment is recorded either way
+        log.warning('payment: rantai handoff PaymentAgent gagal: %s', err)
+    return result
+
+
 @app.post('/command')
 async def command(body: CommandBody) -> dict:
     """The chat's business slash commands (`/design`, `/pending-items`, `/approve`).
@@ -208,7 +232,11 @@ async def webhook_payment(
     request: Request,
     x_signature_key: str | None = Header(default=None),
 ) -> dict:
-    """Midtrans notification: verify the signature, then record it once."""
+    """Midtrans notification: verify the signature, record it once, then act on it.
+
+    The answer stays `{"status":"queued"}`, with the `action` PaymentAgent took,
+    so the caller never waits for a refund card: that one is queued.
+    """
     try:
         payload = await request.json()
     except ValueError:
@@ -229,6 +257,11 @@ async def webhook_payment(
         'payment order=%s status=%s baru=%s',
         payload.get('order_id'), status, fresh,
     )
-    if fresh and status == 'chargeback':
-        _queue(asyncio.to_thread(triggers.run_trigger, 'chargeback_received', payload, 'midtrans'))
-    return {'status': 'queued'}
+    if not fresh:
+        # Midtrans retries; the first notification already did the work
+        return {'status': 'queued', 'action': 'duplicate'}
+    if payments.wants_card(payload):
+        _queue(asyncio.to_thread(_process_payment, payload))
+        return {'status': 'queued', 'action': 'refund_requested'}
+    work = await asyncio.to_thread(_process_payment, payload)
+    return {'status': 'queued', 'action': work.get('action')}

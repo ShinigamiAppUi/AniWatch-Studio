@@ -1005,6 +1005,191 @@ def main() -> int:
     other = client.post('/command', json={'text': '/status'}).json()
     check('w7: the route leaves a base command alone', other.get('handled') is False, str(other))
 
+    # 12. W9: Finance, Legal, Security ---------------------------------------
+    from hermes_agents import dmca as dmca_mod
+    from hermes_agents import finance
+    from hermes_agents import sec_ops
+
+    def payment_row(order: str, user: str, amount: int, status: str, when: float) -> None:
+        """One recorded notification, the shape `payments.record()` writes."""
+        con.execute(
+            'INSERT OR REPLACE INTO payment_events '
+            '(id, order_id, user_id, event_type, amount_idr, payment_method, status, processed_at, created_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            (f'{order}:200:settlement', order, user, 'settlement', amount, 'qris', status, when, when),
+        )
+        con.commit()
+
+    # PaymentAgent: renewal failed -> grace 3 hari -> downgrade
+    payment_row('sc-renew', 'renew@example.com', 149000, 'processed', now - 86400)
+    letters = _Mailbox()
+    graced_payment = finance.handle_failure(
+        {'order_id': 'sc-renew', 'customer_id': 'renew@example.com',
+         'transaction_status': 'deny'}, now=now, con=con, transport=letters)
+    sub = con.execute("SELECT * FROM subscription_status WHERE user_id = 'renew@example.com'").fetchone()
+    check('w9: a failed renewal sets a 3-day grace and mails the subscriber',
+          graced_payment['action'] == 'grace' and sub['grace_until'] == now + finance.GRACE_S
+          and sub['retry_count'] == 1 and len(letters.sent) == 1,
+          f'{graced_payment} {dict(sub) if sub else None} mail={len(letters.sent)}')
+    downgraded = finance.handle_failure(
+        {'order_id': 'sc-renew', 'customer_id': 'renew@example.com',
+         'transaction_status': 'expire'}, now=now, con=con)
+    sub = con.execute("SELECT * FROM subscription_status WHERE user_id = 'renew@example.com'").fetchone()
+    check('w9: the second failed renewal downgrades to free and counts subscriptions_lost',
+          downgraded['action'] == 'downgrade' and sub['plan'] == 'free'
+          and downgraded['metric'] == {'subscriptions_lost': 1} and sub['grace_until'] is None,
+          f'{downgraded} {dict(sub)}')
+
+    # refund: window, card, approve / reject / timeout
+    payment_row('sc-refund', 'buyer@example.com', 35000, 'processed', now - 2 * 86400)
+    queued_refund = finance.refund_request(
+        {'order_id': 'sc-refund', 'customer_id': 'buyer@example.com'}, now=now, con=con)
+    check('w9: a refund inside the 7-day window is queued as pending, never paid',
+          queued_refund['action'] == 'refund_requested'
+          and (finance.refund_row(con, 'sc-refund') or {}).get('status') == 'pending',
+          str(queued_refund))
+    refund_carded = finance.request_refund_approval('sc-refund', char=_Card('Approve'), now=now, con=con)
+    check('w9: Approve on the refund card is the only way to refunded',
+          refund_carded['action'] == 'refunded'
+          and finance.refund_row(con, 'sc-refund')['status'] == 'refunded'
+          and refund_carded['metric'] == {'refunds_processed': 1}, str(refund_carded))
+
+    payment_row('sc-refund2', 'buyer2@example.com', 35000, 'processed', now - 86400)
+    finance.refund_request({'order_id': 'sc-refund2'}, now=now, con=con)
+    refund_refused = finance.request_refund_approval('sc-refund2', char=_Card('Tolak'), now=now, con=con)
+    check('w9: Tolak leaves the money where it was and records the refusal',
+          refund_refused['action'] == 'rejected'
+          and finance.refund_row(con, 'sc-refund2')['status'] == 'failed', str(refund_refused))
+
+    payment_row('sc-refund3', 'buyer3@example.com', 35000, 'processed', now - 86400)
+    finance.refund_request({'order_id': 'sc-refund3'}, now=now, con=con)
+    finance.request_refund_approval('sc-refund3', char=_Card('timeout'), now=now, con=con)
+    check('w9: a timeout on the refund card keeps the request in the queue',
+          finance.refund_row(con, 'sc-refund3')['status'] == 'pending'
+          and 'sc-refund3' in [row['order_id'] for row in finance.refund_queue(con)])
+
+    payment_row('sc-old', 'late@example.com', 35000, 'processed', now - 30 * 86400)
+    too_late = finance.refund_request({'order_id': 'sc-old'}, now=now, con=con)
+    check('w9: a refund after the 7-day window is refused with the age named',
+          too_late['action'] == 'refused' and '7 hari' in too_late['reason'], str(too_late))
+
+    # chargeback: revoke the named item, then reach SecOps through the trigger
+    revocable = premium.start('border', 'neon', now=now)
+    premium.decide(str(revocable['id']), 'Approve', now=now)
+    chargeback = w4triggers.run_trigger(
+        'chargeback_received',
+        {'order_id': 'sc-cb', 'customer_id': 'fraud@example.com', 'gross_amount': '75000',
+         'item_id': str(revocable['id'])}, 'midtrans')
+    chargeback_work = chargeback.get('work') or {}
+    chargeback_hops = [(hop['from'], hop['to']) for hop in (chargeback.get('chain') or [])]
+    flagged = con.execute(
+        "SELECT action, rule FROM security_incidents WHERE target = 'fraud@example.com' "
+        'ORDER BY created_at DESC LIMIT 1').fetchone()
+    check('w9: a chargeback revokes the named item and reaches SecOps as one hop',
+          chargeback_work.get('action') == 'chargeback'
+          and bool((chargeback_work.get('revoked') or {}).get('revoked'))
+          and (premium.get_item(str(revocable['id'])) or {}).get('status') == 'revoked'
+          and chargeback_hops == [('PaymentAgent', 'SecOps')]
+          and flagged is not None and flagged['action'] == 'flag_account',
+          f'{chargeback_work} hops={chargeback_hops} flagged={dict(flagged) if flagged else None}')
+
+    # SecOps: no feed -> says so; with the feed -> the rule really fires
+    os.environ['SECURITY_EVENT_FEED'] = ''
+    quiet_round = sec_ops.monitor(now=now, con=con)
+    check('w9: without the access feed SecOps names what it cannot count',
+          any('SECURITY_EVENT_FEED' in line for line in quiet_round['insufficient'])
+          and quiet_round['violations'] == [], str(quiet_round))
+
+    security_feed = tmp / 'security-events.jsonl'
+    security_feed.write_text('\n'.join(
+        json.dumps({'at': now - 10, 'type': 'login_failed', 'ip': '10.0.0.9'}) for _ in range(5)
+    ) + '\n', encoding='utf-8')
+    os.environ['SECURITY_EVENT_FEED'] = str(security_feed)
+    armed = sec_ops.monitor(now=now, con=con)
+    check('w9: five failed logins in 60 s ban the IP',
+          any(row['rule'] == 'login_attempts' for row in armed['violations'])
+          and sec_ops.is_banned('10.0.0.9', con=con), str(armed))
+    check('w9: the same breach inside the cooldown writes no second incident',
+          sec_ops.monitor(now=now, con=con)['blocked'] == 0)
+    unbanned = sec_ops.unban('10.0.0.9', now=now + 1, con=con)
+    check('w9: unban is a new row, and it lifts the block',
+          unbanned['ok'] is True and not sec_ops.is_banned('10.0.0.9', con=con), str(unbanned))
+    os.environ['SECURITY_EVENT_FEED'] = ''
+
+    # DMCA: a takedown before the embargo, after it, twice, and refused
+    sched.schedule_episode(con, episode_id='sc-dmca-scheduled', anime_title='Legal',
+                           episode_number=1, encoded_path='/tmp/d1.mp4', embargo_until=now + 3600)
+    takedown = dmca_mod.handle_takedown(
+        {'episode_id': 'sc-dmca-scheduled', 'requester': 'Studio X', 'reason': 'hak cipta'},
+        now=now, con=con)
+    takedown_row = sched.get_schedule(con, 'sc-dmca-scheduled')
+    takedown_audit = con.execute('SELECT status FROM dmca_requests WHERE id = ?', (takedown['id'],)).fetchone()
+    check('w9: a DMCA takedown cancels a scheduled episode through EpisodeScheduler',
+          takedown['action'] == 'cancelled' and takedown_row['status'] == 'cancelled'
+          and [(hop['from'], hop['to']) for hop in (takedown.get('chain') or [])]
+          == [('DMCA', 'EpisodeScheduler')]
+          and takedown_audit is not None and takedown_audit['status'] == 'cancelled',
+          f'{takedown.get("action")} {dict(takedown_row)} {dict(takedown_audit) if takedown_audit else None}')
+    check('w9: a cancelled episode never publishes',
+          'sc-dmca-scheduled' not in [row['episode_id']
+                                       for row in sched.publish_due_episodes(con, now + 7200)])
+
+    sched.schedule_episode(con, episode_id='sc-dmca-live', anime_title='Legal',
+                           episode_number=2, encoded_path='/tmp/d2.mp4', embargo_until=now - 60)
+    sched.publish_due_episodes(con, now)
+    live_takedown = dmca_mod.handle_takedown(
+        {'episode_id': 'sc-dmca-live', 'requester': 'Studio Y', 'reason': 'lisensi'},
+        now=now, con=con)
+    check('w9: a takedown on a live episode unpublishes it and says the CDN was not purged',
+          live_takedown['action'] == 'unpublished'
+          and sched.get_schedule(con, 'sc-dmca-live')['status'] == 'cancelled'
+          and live_takedown['cdn_purged'] is False and bool(live_takedown['cdn_reason']),
+          str(live_takedown)[:200])
+    check('w9: the same takedown twice is a duplicate, not a second cancel',
+          dmca_mod.handle_takedown(
+              {'episode_id': 'sc-dmca-scheduled', 'requester': 'Studio X', 'reason': 'ulang'},
+              now=now, con=con)['action'] == 'duplicate')
+    refused = dmca_mod.handle_takedown({'anime_id': 'a-1', 'reason': 'semua episode'}, now=now, con=con)
+    check('w9: a request without episode_id/requester is refused, and still recorded',
+          refused['action'] == 'refused' and bool(refused['id'])
+          and 'episode_id' in refused['missing']
+          and con.execute('SELECT COUNT(*) FROM dmca_requests WHERE id = ?',
+                          (refused['id'],)).fetchone()[0] == 1, str(refused))
+
+    # The payment door, end to end: signature -> row -> PaymentAgent -> handoff
+    settled_payload = {'order_id': 'sc-e2e', 'status_code': '200', 'gross_amount': '99000.00',
+                       'transaction_status': 'settlement', 'customer_id': 'e2e@example.com',
+                       'payment_type': 'qris'}
+    settled_answer = client.post('/webhook/payment', json=settled_payload,
+                                 headers={'X-Signature-Key': payments.signature(
+                                     settled_payload, 'selfcheck-midtrans')})
+    e2e_sub = con.execute(
+        "SELECT plan FROM subscription_status WHERE user_id = 'e2e@example.com'").fetchone()
+    e2e_rows = con.execute("SELECT COUNT(*) FROM payment_events WHERE order_id = 'sc-e2e'").fetchone()[0]
+    check('w9: POST /webhook/payment runs PaymentAgent end to end',
+          settled_answer.status_code == 200 and settled_answer.json().get('action') == 'settled'
+          and e2e_sub is not None and e2e_sub['plan'] == 'premium' and e2e_rows == 1,
+          f'{settled_answer.json()} {dict(e2e_sub) if e2e_sub else None} rows={e2e_rows}')
+    check('w9: the settled payment reached RevenueTracker and left a snapshot',
+          not [key for key in ho.pending() if 'revenuetracker' in key]
+          and Path(finance.snapshot_path(time.time())).exists(), str(list(ho.pending())))
+
+    revenue_reply = w7commands.handle_command('/revenue', now=now)
+    security_reply = w7commands.handle_command('/security', now=now)
+    subs_reply = w7commands.handle_command('/subscriptions', now=now)
+    check('w9: /revenue, /security and /subscriptions answer from real rows',
+          revenue_reply.get('ok') is True and 'file:' in revenue_reply.get('reply', '')
+          and Path(str(revenue_reply.get('path'))).exists()
+          and security_reply.get('ok') is True and 'insiden' in security_reply.get('reply', '')
+          and subs_reply.get('ok') is True and 'subscription' in subs_reply.get('reply', ''),
+          str(revenue_reply)[:160])
+    check('w9: the chargeback trigger is wired to PaymentAgent',
+          w4triggers.AGENT_HANDLERS.get('chargeback_received') is w4triggers._payment_work)
+    nodes = set(orch.build_orchestrator_graph().node_names)
+    check('w9: PaymentAgent, RevenueTracker, SecOps and EpisodeScheduler are graph nodes',
+          {'PaymentAgent', 'RevenueTracker', 'SecOps', 'EpisodeScheduler'} <= nodes,
+          str(sorted(nodes)))
+
     support.close()
 
     print()

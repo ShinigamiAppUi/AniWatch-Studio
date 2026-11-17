@@ -22,8 +22,19 @@ afterEach(() => {
 })
 
 describe('BIZ_SLASH_COMMANDS', () => {
-  it('is the three commands W7 adds, as API-REFERENCE.md §6 lists them', () => {
-    expect(BIZ_SLASH_COMMANDS).toEqual(['/design', '/pending-items', '/approve'])
+  it('is the commands W7 and W9 add, as API-REFERENCE.md §6 lists them', () => {
+    expect(BIZ_SLASH_COMMANDS).toEqual([
+      '/design',
+      '/pending-items',
+      '/approve',
+      '/revenue',
+      '/payments',
+      '/subscriptions',
+      '/refunds',
+      '/chargeback',
+      '/security',
+      '/takedown',
+    ])
   })
 })
 

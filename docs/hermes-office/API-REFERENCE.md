@@ -408,11 +408,30 @@ curl -s -X POST http://127.0.0.1:8765/command \
 # → {"handled":true,"ok":true,"reply":"🗂 1 item menunggu approval:\n- pm-1a2b border/neon ..."}
 ```
 
-### `POST /webhook/payment` (W4 — verifikasi + catat; agent PaymentAgent W9)
+### `POST /webhook/payment` (W4 verifikasi → W9 PaymentAgent)
 
 Notifikasi Midtrans. Header `X-Signature-Key` harus sama dengan
 `sha512(order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY)` (explicit `utf-8`,
-`.get('', ...)` default — fix Rev 3 #9). Sukses → `{"status":"queued"}` ke PaymentAgent.
+`.get('', ...)` default — fix Rev 3 #9). Urutannya: verifikasi → `record()` (satu baris per
+notifikasi, `INSERT OR IGNORE`) → **PaymentAgent** (`finance.handle_payment_webhook`) → handoff-nya
+diikuti (`payment_settled` → RevenueTracker, `chargeback` → SecOps).
+
+Jawaban selalu `{"status":"queued","action":...}`; `action` adalah yang benar-benar terjadi
+(`settled`, `grace`, `downgrade`, `chargeback`, `refunded`, `ignored`, `duplicate`).
+
+`transaction_status: "refund_request"` bukan status Midtrans: itu cara refund **diminta** lewat pintu
+yang sama, sehingga permintaan ikut terverifikasi signature. Hanya status ini yang memblokir (kartu
+Approve/Tolak/Minta Info, timeout 24 jam), jadi ia diangkat di worker thread dan jawabannya
+`{"status":"queued","action":"refund_requested"}`.
+
+```bash
+# settlement: satu baris, satu langganan, satu snapshot revenue
+curl -s -X POST http://127.0.0.1:8765/webhook/payment \
+  -H 'Content-Type: application/json' -H "X-Signature-Key: $SIG" \
+  -d '{"order_id":"o-9","status_code":"200","gross_amount":"99000.00",
+       "transaction_status":"settlement","customer_id":"budi@example.com"}'
+# → {"status":"queued","action":"settled"}
+```
 
 ### `GET /health`
 
@@ -541,10 +560,21 @@ Ditangani di `server/index.js` sebelum event diproses.
 
 ### Bisnis (baru)
 
-Didaftarkan di chat routing yang sama. Format: `<command> [arg]`. **W7 sudah hidup:** `/design`,
-`/pending-items`, `/approve` — base command di `server/index.js` menang lebih dulu, lalu baris yang
-cocok direlai `bizSlashCommand()` ke sidecar `POST /command`. Sisanya di tabel bawah ini masih
-rencana (W9/W10), dan kantor tidak mengaku menjalankannya.
+Didaftarkan di chat routing yang sama. Format: `<command> [arg]`. **Sudah hidup:** W7 — `/design`,
+`/pending-items`, `/approve`; W9 — `/revenue`, `/payments`, `/subscriptions`, `/refunds`,
+`/chargeback`, `/security`, `/takedown`. Base command di `server/index.js` menang lebih dulu, lalu
+baris yang cocok direlai `bizSlashCommand()` ke sidecar `POST /command`. Sisanya di tabel bawah ini
+masih rencana (W10), dan kantor tidak mengaku menjalankannya.
+
+| Command W9 | Output | Sumber data |
+| --- | --- | --- |
+| `/revenue` | 24 jam + 7 hari, antrean refund, anomali, path snapshot | `payment_events` → `media/published/revenue/` |
+| `/payments` | notifikasi 24 jam per status | `payment_events` |
+| `/subscriptions` | jumlah plan, grace, kedaluwarsa | `subscription_status` |
+| `/refunds` | refund `pending` (menunggu kartu) | `payment_events` `refund_request` |
+| `/chargeback` | chargeback terbaru | `payment_events` status `chargeback` |
+| `/security` | insiden 24 jam + status feed + chargeback per akun | `security_incidents`, `payment_events` |
+| `/takedown [episode_id] [alasan]` | verifikasi + catat + handoff ke EpisodeScheduler | `dmca_requests`, `episode_schedule` |
 
 | Command | Output | Sumber data |
 | --- | --- | --- |
@@ -567,6 +597,7 @@ rencana (W9/W10), dan kantor tidak mengaku menjalankannya.
 | `/schedule` | antrian + estimasi live | `episode_schedule` |
 | `/embargo [episode_id]` | detail embargo | `episode_schedule` |
 | `/cancel-schedule [id]` | batalkan schedule | `episode_schedule` |
+| `/takedown [id] [alasan]` | DMCA: cancel atau unpublish + audit | `dmca_requests` → EpisodeScheduler |
 | `/translations` | status terjemahan | `subtitle_tracks` |
 | `/approve-sub [episode_id]` | approve subtitle | `subtitle_tracks` |
 | `/reports` | laporan user hari ini | `user_reports` |

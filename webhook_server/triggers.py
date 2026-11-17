@@ -12,8 +12,10 @@ here. Two things live in this file:
 
 What a trigger does: the business work, through the agents that exist so far.
 `support_ticket`/`new_email` go to `hermes_agents.support` (triage -> KB -> reply
-or escalate), `user_report` to `hermes_agents.user_report`, and the growth
-triggers to `analytics.py` / `marketing.py` / `social.py` / `retention.py` (W6).
+or escalate), `user_report` to `hermes_agents.user_report`, the growth triggers to
+`analytics.py` / `marketing.py` / `social.py` / `retention.py` (W6), and
+`chargeback_received` to `finance.py` (W9), whose handoff to SecOps is followed
+right after.
 A trigger with no tool yet only draws the two characters, which is honest: it
 was accepted, the work is not built. Work is called from here, never from the
 webhook route.
@@ -188,6 +190,12 @@ def _retention_work(payload: object, char=None) -> dict:
     return handle_trigger(payload, char=char)
 
 
+def _payment_work(payload: object, char=None) -> dict:
+    from hermes_agents.finance import handle_trigger
+
+    return handle_trigger(payload, char=char)
+
+
 #: trigger -> the agent work that exists. Everything else only draws characters
 #: (`new_lead`/`form_submit`/`deal_stage_change` need the Sales agent, W10;
 #: `episode_released` announces through `pipeline.announce` after publishing).
@@ -200,6 +208,7 @@ AGENT_HANDLERS = {
     'content_schedule': _social_work,
     'announce_episode': _social_work,
     'retention_check': _retention_work,
+    'chargeback_received': _payment_work,
 }
 
 
@@ -260,8 +269,8 @@ def run_trigger(trigger: str, data: object = None, source: str = 'webhook') -> d
         agent = bridge.agent_start(role, role, task)
         agents.append(agent)
         bridge.agent_update(agent, f'{trigger} dari {source}', tool='handle_trigger')
-        # The tool that does the work lives in hermes_agents; until W6-W9 the
-        # character is the whole record for the triggers that have none
+        # The tool that does the work lives in hermes_agents; a trigger with no
+        # handler leaves the character as the whole record, which is honest
         work = _run_work(trigger, data, _RoleCharacter(agent))
         chain = _follow(role)
         bridge.agent_done(agent, _work_line(trigger, source, work))
@@ -300,7 +309,7 @@ def _work_line(trigger: str, source: str, work: dict | None) -> str:
     if work.get('error'):
         return f'{trigger} gagal: {str(work["error"])[:60]}'
     action = work.get('action')
-    ref = work.get('ticket') or work.get('report')
+    ref = work.get('ticket') or work.get('report') or work.get('order_id')
     if action:
         return f'{action} {ref} ({trigger})' if ref else f'{action} ({trigger})'
     if work.get('breaches') is not None:

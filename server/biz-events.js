@@ -136,10 +136,22 @@ export function getBizMetrics(db, activeAgents = () => []) {
  * @returns {Promise<boolean>} true when the frame was an approval response
  */
 /** The business commands the chat accepts (docs/hermes-office/API-REFERENCE.md §6) */
-export const BIZ_SLASH_COMMANDS = ['/design', '/pending-items', '/approve']
+export const BIZ_SLASH_COMMANDS = [
+  '/design',
+  '/pending-items',
+  '/approve',
+  '/revenue',
+  '/payments',
+  '/subscriptions',
+  '/refunds',
+  '/chargeback',
+  '/security',
+  '/takedown',
+]
 
 /** One command line, so `/designfoo` stays an ordinary chat message */
-const BIZ_COMMAND_RE = /^\/(design|pending-items|approve)(?:\s|$)/
+const BIZ_COMMAND_RE =
+  /^\/(design|pending-items|approve|revenue|payments|subscriptions|refunds|chargeback|security|takedown)(?:\s|$)/
 
 /** A chat line is short; the sidecar clamps again on its own side */
 const MAX_COMMAND_CHARS = 200

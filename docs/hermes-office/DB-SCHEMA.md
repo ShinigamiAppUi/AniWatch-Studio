@@ -249,12 +249,18 @@ CREATE TABLE IF NOT EXISTS subscription_status (
 );
 ```
 
-**Writer:** `PaymentAgent.handle_payment_webhook()` + semua handler; `subscription_status` ditulis
-oleh `_handle_success()` / `_handle_renewal_failed()`. · **Reader:** `PaymentAgent`, `/payments`,
-`/subscriptions`, `/refunds`, `/revenue`.
+**Writer:** `PaymentAgent.handle_payment_webhook()` + semua handler (`hermes_agents/finance.py`,
+W9); `subscription_status` hanya ditulis `handle_success()` / `handle_failure()`. · **Reader:**
+`PaymentAgent`, `/payments`, `/subscriptions`, `/refunds`, `/revenue`, `retention.py`.
 
 Idempotensi: `INSERT OR IGNORE` atas `payment_events.id` — Midtrans bisa mengirim notifikasi yang
 sama dua kali, dan refund ganda adalah bug uang, bukan bug UI.
+
+Satu order bisa punya beberapa baris, dan itu memang tujuannya: satu baris per notifikasi
+(`settlement`, `chargeback`, …) ditambah **satu baris permintaan refund** (`event_type='refund_request'`,
+`id='refund-<order_id>'`, status `pending` → `refunded`/`failed`). `status` sebuah order dibaca dari
+baris terbarunya, jadi `RevenueTracker` tidak menghitung order yang di-chargeback sebagai pemasukan.
+Permintaan refund yang timeout tetap `pending` — kartu yang hilang bukan keputusan.
 
 ---
 
@@ -273,7 +279,7 @@ CREATE TABLE IF NOT EXISTS premium_items (
     price_idr    INTEGER,
     status       TEXT DEFAULT 'draft',
                  -- draft | qa_passed | priced | previewed | pending_approval
-                 -- | approved | rejected | live
+                 -- | approved | rejected | live | revoked (chargeback, W9)
     created_at   REAL NOT NULL,
     updated_at   REAL
 );
@@ -493,3 +499,59 @@ CREATE TABLE IF NOT EXISTS recommendations (
 **Umur data:** satu baris per (user, episode), ditimpa tiap batch — skor lama tidak menumpuk.
 Sumber angka tontonan (`ANALYTICS_FEED`) juga file milik situs, bukan tabel di fork ini
 (ENV-VARS.md §3d); tidak ada DDL baru yang perlu dimigrasi.
+
+---
+
+## 16. `security_incidents` — SecOps (W9)
+
+Log aksi keamanan. **Append-only**: tidak ada kode yang `UPDATE` atau `DELETE` di tabel ini, dan
+`/unban` menambah baris `unban` alih-alih menghapus ban (SECURITY.md §10).
+
+```sql
+CREATE TABLE IF NOT EXISTS security_incidents (
+    id         TEXT PRIMARY KEY,            -- sc-xxxxxxxxxx
+    rule       TEXT NOT NULL,               -- login_attempts | concurrent_devices | request_rate | chargeback_count | manual
+    target     TEXT NOT NULL,               -- ip atau user_id
+    action     TEXT NOT NULL,               -- ban_ip | soft_lock | rate_limit | flag_account | unban
+    reason     TEXT,
+    actor      TEXT NOT NULL,               -- 'SecOps', atau nama orang untuk /unban
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_target  ON security_incidents (target, created_at);
+CREATE INDEX IF NOT EXISTS idx_incidents_created ON security_incidents (created_at);
+```
+
+**Writer:** `sec_ops.apply_rule()` dari `monitor()` (rule di AGENTS.md §4.6), dari node SecOps
+(handoff `chargeback`) dan dari `/unban`. · **Reader:** `/security`, `/incidents`.
+Status blokir dihitung dari baris **terakhir** milik `target` (`sec_ops.is_banned`), jadi `unban`
+cukup menambah baris. Rule+target yang sama dalam `COOLDOWN_S` (300 dtk) tidak menulis baris kedua —
+itu yang mencegah lebih dari satu baris per detik saat ambang terlampaui terus.
+
+---
+
+## 17. `dmca_requests` — DMCA (W9)
+
+Bukti permintaan takedown. **Append-only**, termasuk permintaan yang ditolak: yang berubah hanya
+`status` dan `detail` sesudah ditangani.
+
+```sql
+CREATE TABLE IF NOT EXISTS dmca_requests (
+    id         TEXT PRIMARY KEY,            -- dmca-xxxxxxxxxx
+    episode_id TEXT,
+    anime_id   TEXT,
+    requester  TEXT NOT NULL,
+    reason     TEXT,
+    evidence   TEXT,
+    status     TEXT DEFAULT 'received',     -- received | cancelled | unpublished | duplicate | unknown_episode | refused
+    detail     TEXT,
+    created_at REAL NOT NULL,
+    handled_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_dmca_episode ON dmca_requests (episode_id, created_at);
+```
+
+**Writer:** `dmca.record_request()` / `_update_request()`. · **Reader:** `/takedown`, `dmca.requests()`.
+`episode_schedule` tetap satu-satunya sumber status episode: `cancelled` untuk yang belum live,
+`cancelled` + `cancel_reason` untuk yang sudah live (barisnya tidak dihapus). Purge CDN tidak
+dicatat sebagai berhasil — `cdn_purged` selalu `false` dengan alasannya, karena fork ini tidak punya
+endpoint purge.

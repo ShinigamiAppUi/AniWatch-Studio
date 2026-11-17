@@ -242,6 +242,30 @@ lulus.
 refund → card → approve/tolak; chargeback → item dicabut + SecOps dinotif. DMCA membatalkan
 schedule yang belum live.
 
+**Status W9:** selesai di `hermes_agents/finance.py` (PaymentAgent + RevenueTracker),
+`hermes_agents/dmca.py`, `hermes_agents/sec_ops.py` dan `POST /webhook/payment`.
+
+- [x] `finance.py`: `handle_success` / `handle_failure` (grace 3 hari, lalu `free` +
+  `subscriptions_lost`), `refund_request` (jendela 7 hari) → `request_refund_approval` (tiga opsi,
+  timeout 24 jam) → `decide_refund` sebagai **satu penulis** status refund; `flag_chargeback`
+  mencabut item yang disebut `item_id`, menghitung `chargebacks`, lalu handoff → SecOps.
+- [x] `POST /webhook/payment` tidak lagi berhenti di `record()`: notifikasi yang baru diverifikasi
+  langsung dijalankan PaymentAgent (`handle_payment_webhook`), dan handoff-nya (`payment_settled` →
+  RevenueTracker, `chargeback` → SecOps) diikuti di panggilan yang sama. `refund_request` — satu-
+  satunya status yang memblokir — diangkat di worker thread seperti kartu premium.
+- [x] `dmca.py`: verifikasi (`episode_id`, `requester`, `reason`) → catat di `dmca_requests` →
+  handoff `DMCA → EpisodeScheduler` (baris §3) → node EpisodeScheduler memanggil `cancel_schedule`
+  (belum live) atau unpublish (sudah live). Permintaan yang lewat jendela/payload tidak lengkap
+  tetap dicatat sebagai `refused`; purge CDN tidak diklaim (belum ada endpoint).
+- [x] `sec_ops.py`: empat rule AGENTS §4.6; `login_attempts`/`concurrent_devices`/`request_rate`
+  hanya jalan dengan `SECURITY_EVENT_FEED` (dan `insufficient` menyebutnya kalau kosong),
+  `chargeback_count` dibaca dari `payment_events`; aksi dicatat append-only di
+  `security_incidents`, `/unban` menambah baris. `agent_working` hanya saat ada pelanggaran.
+- [x] `/revenue`, `/payments`, `/subscriptions`, `/refunds`, `/chargeback`, `/security`,
+  `/takedown` didaftarkan di `webhook_server/commands.py` + relay chat.
+- [x] Tidak ada job scheduler baru: kesebelas job SCHEDULER.md §2 sudah terdaftar sejak W6, dan W9
+  bekerja dari event (webhook) serta command, bukan dari putaran berkala.
+
 ### W10 — Dashboard + polish
 
 - [x] `BizMetricsPanel.tsx` — ada: tombol **biz** di status strip, `GET /biz-metrics` +

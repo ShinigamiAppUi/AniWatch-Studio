@@ -160,6 +160,26 @@ yang belum bisa dihitung — bukan angka karangan. Kanal sosial tidak butuh vari
 `DISCORD_WEBHOOK_URL` dan `TELEGRAM_*` di §3 dipakai SocialMedia (satu post per channel per
 episode), sedangkan X ditandai "belum diimplementasikan" karena bearer token hanya bisa baca.
 
+### 3e. Finance, Legal, Security (W9) — `hermes_agents/finance.py`, `dmca.py`, `sec_ops.py`
+
+Satu variabel baru. Yang lain sudah ada: `MIDTRANS_SERVER_KEY` (§2) wajib untuk `/webhook/payment`,
+dan `SMTP_*` (§3b) dipakai surat masa tenggang PaymentAgent — hanya kalau id user memang alamat email.
+
+| Variabel | Wajib | Default | Arti |
+| --- | --- | --- | --- |
+| `SECURITY_EVENT_FEED` | tidak | — (kosong) | JSONL event akses: `{"at": epoch, "type": "login_failed"\|"session_open"\|"request", "ip": "...", "user_id": "..."}`. Dipakai tiga rule SecOps (`login_attempts`, `concurrent_devices`, `request_rate`) |
+
+Fork ini tidak punya access log web sendiri, jadi tanpa `SECURITY_EVENT_FEED` ketiga rule itu
+**tidak berjalan**: `monitor()` mengembalikan `violations: []` beserta `insufficient` yang menyebut
+variabelnya, dan `/security` menampilkan kalimat itu. Rule keempat, `chargeback_count`, membaca
+`payment_events` sehingga tetap bekerja di instalasi kosong. Jangan mengisi file contoh ini dengan
+data karangan: kalau file berisi event fiktif, SecOps akan mem-ban IP fiktif.
+
+Tidak ada variabel untuk refund atau takedown: keduanya keputusan, bukan integrasi. Refund lewat
+kartu di kantor (`refund_request` di `POST /webhook/payment` atau `/refunds`), takedown lewat
+`/takedown`. Purge CDN **tidak** diimplementasikan — `CDN_API_KEY` tetap tidak dipakai untuk purge,
+dan hasil DMCA menyatakan `cdn_purged: false` beserta alasannya.
+
 ---
 
 ## 4. `.env.example`

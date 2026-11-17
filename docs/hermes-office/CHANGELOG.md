@@ -1,5 +1,45 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 3.9 — 17 Nov 2026 (W9: Finance, Legal, Security)
+
+### Ditambahkan
+
+- `hermes_agents/finance.py`: PaymentAgent + RevenueTracker. Renewal gagal → grace 3 hari (+ surat
+  saran metode lain) → `free` + `subscriptions_lost`; refund hanya di dalam jendela 7 hari, kartu
+  Approve/Tolak/Minta Info (timeout 24 jam) dengan `decide_refund()` sebagai satu-satunya penulis;
+  chargeback mencabut item yang disebut `item_id`, menghitung `chargebacks`, lalu handoff → SecOps;
+  snapshot revenue harian ke `media/published/revenue/YYYY-MM-DD.json` dengan dua aturan anomali
+  (`refund_rate > 20%` hanya bila ≥ 5 order, `chargebacks ≥ 2`).
+- `hermes_agents/dmca.py`: verifikasi (`episode_id`, `requester`, `reason`) → `dmca_requests` →
+  handoff `DMCA → EpisodeScheduler` → `cancel_schedule` (belum live) atau unpublish (sudah live).
+  `cdn_purged: false` beserta alasannya; takedown per anime ditolak dan tetap tercatat.
+- `hermes_agents/sec_ops.py`: empat rule AGENTS §4.6, `security_incidents` append-only, `/unban`
+  sebagai baris baru. Tanpa `SECURITY_EVENT_FEED` tiga rule request tidak berjalan dan hasilnya
+  menyebut variabel itu; `chargeback_count` tetap jalan dari `payment_events`.
+- Trigger `chargeback_received` kini punya kerja agent (`finance.handle_trigger`), dan graph
+  Orchestrator memuat node `PaymentAgent`, `RevenueTracker`, `SecOps`, `EpisodeScheduler` — penerima
+  handoff ikut jadi node, jadi rantai uang dan takedown terlihat sebagai hop, bukan catatan di kode.
+- `POST /webhook/payment` tidak lagi berhenti di `record()`: PaymentAgent dijalankan setelah signature
+  + baris idempoten, handoff-nya diikuti, dan jawabannya menyebut `action` yang terjadi.
+  `transaction_status: "refund_request"` adalah pintu permintaan refund (satu-satunya yang memblokir,
+  diangkat di worker thread).
+- `webhook_server/commands.py`: `/revenue`, `/payments`, `/subscriptions`, `/refunds`, `/chargeback`,
+  `/security`, `/takedown`, direlai `server/biz-events.js` (10 command bisnis).
+- `hermes_bridge/schema_biz.sql` + DB-SCHEMA §16/§17: `security_incidents`, `dmca_requests`;
+  `premium_items.status` mendapat nilai `revoked`.
+- `SECURITY_EVENT_FEED` di ENV-VARS §3e dan `.env.example`.
+
+### Diubah
+
+- Selfcheck: **176 PASS / 0 FAIL** (22 cek W9: grace, downgrade, refund approve/tolak/timeout/
+  jendela, chargeback + revoke + hop SecOps, feed hilang vs feed ada, cooldown, unban, takedown
+  scheduled/live/duplikat/ditolak, `POST /webhook/payment` end-to-end, tiga command, node graph).
+- `tests/biz-commands.test.ts`: daftar command bisnis kini sepuluh.
+- API-REFERENCE §4/§6, AGENTS §4.6, DB-SCHEMA §7/§8/§16/§17, SECURITY §7/§10, PLAN W9, ENV-VARS §3e
+  diperbarui dalam commit yang sama.
+
+---
+
 ## Rev 3.8 — 17 Nov 2026 (W7: premium pipeline)
 
 ### Ditambahkan

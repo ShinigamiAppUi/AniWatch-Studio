@@ -11,9 +11,9 @@ Three things, in the order they must happen:
    on a deterministic id, so a notification Midtrans sends twice does not refund
    twice (SECURITY.md §5, DB-SCHEMA.md §7).
 
-No status is acted on here: a refund or a chargeback needs an agent and an
-approval card, and those are W9. This file makes the notification trustworthy
-and idempotent first.
+No status is acted on here: what a notification *means* is PaymentAgent's work
+(`hermes_agents/finance.py`, W9). This file makes the notification trustworthy
+and idempotent first, and says which statuses need a card (`wants_card`).
 """
 
 from __future__ import annotations
@@ -90,6 +90,17 @@ def amount_of(payload: dict) -> int | None:
         return int(float(str(payload.get('gross_amount', '')).replace(',', '')))
     except (TypeError, ValueError):
         return None
+
+
+def wants_card(payload: dict) -> bool:
+    """True when this notification asks for a decision a person has to make.
+
+    `refund_request` is not a Midtrans status: it is how a refund is asked for
+    through the same verified door (`POST /webhook/payment`). Those, and only
+    those, block on a card, so the route raises them in a worker thread instead
+    of holding the request open for 24 hours.
+    """
+    return str(payload.get('transaction_status', '')).strip().lower() == 'refund_request'
 
 
 def record(con: sqlite3.Connection, payload: dict, now: float | None = None) -> bool:

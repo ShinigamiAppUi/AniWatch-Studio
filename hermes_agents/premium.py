@@ -437,6 +437,26 @@ def publish(item_id: str, now: float | None = None) -> dict:
     return {**live, 'published': True, 'manifest': str(path)}
 
 
+def revoke_item(item_id: str, reason: str, *, now: float | None = None,
+                con: sqlite3.Connection | None = None) -> dict:
+    """Chargeback (W9): take a live item out of the store, keeping its row.
+
+    Only `live` can be revoked - an item that never shipped has nothing to
+    revoke - and the reason is stored in context so the row stays explainable.
+    """
+    at = time.time() if now is None else float(now)
+    item = get_item(item_id, con=con)
+    if item is None:
+        return {'revoked': False, 'error': f'item {item_id} tidak ada'}
+    if item['status'] != 'live':
+        return {'revoked': False, 'id': item_id, 'status': item['status'],
+                'reason': f'status {item["status"]} bukan live'}
+    row = _set_status(item_id, {'status': 'revoked'}, con=con, now=at)
+    _remember(item_id, {'revoked_at': at, 'revoke_reason': str(reason)[:200]})
+    log.warning('premium: %s dicabut (%s)', item_id, reason)
+    return {**row, 'revoked': True, 'reason': str(reason)[:200]}
+
+
 def decide(item_id: str, decision: str, *, now: float | None = None,
            release_card: bool = True) -> dict:
     """The one writer out of `pending_approval`.
