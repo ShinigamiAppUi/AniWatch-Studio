@@ -273,15 +273,39 @@ schedule yang belum live.
 - [x] `OrchestratorCard.tsx` — ada: tombol **orch** di status strip, menampilkan trigger yang
   sedang dirutekan, trigger yang sudah lewat, 13 trigger yang bisa dirutekan, dan 12 handoff
   `pending` (`src/orchestrator.ts`). `build_orchestrator_graph()` di Python tetap W8.
-- SLA + metrics live, semua slash command terdaftar
-- CacheWarmer + Retention scheduler aktif
-- Backup harian (DB-SCHEMA.md §13)
+- [x] SLA + metrics live: tiket mencatat `first_response_at` (balasan terkirim pertama) dan
+  Support mengirim gauge `tickets_pending`, `tickets_resolved`, `sla_avg_response_min`,
+  `sla_breach_count` setiap kali tiket berubah. Kolomnya masuk lewat `migrate()`, bukan DROP.
+- [x] Semua slash command terdaftar (23): `/biz`, `/leads`, `/tickets`, `/sla`, `/topselling`,
+  `/incidents`, `/unban`, `/schedule`, `/embargo`, `/translations`, `/approve-sub`, `/reports`,
+  `/report-stats` menyusul tujuh command W9. `/cancel-schedule` tidak didaftarkan: `/takedown`
+  adalah pintunya, dengan audit DMCA.
+- [x] CacheWarmer + Retention scheduler aktif sejak W6 (`cache_warmer` 17.00, `weekly_report`
+  Senin 09.00 lewat Orchestrator); W10 tidak menambah job.
+- [x] Backup harian `db_backup` 02.00 (DB-SCHEMA.md §13), terdaftar sejak W4.
 
 **Deliverable:** kantor siap dipakai harian oleh CEO.
 
 **Kriteria terima:** checklist [BLUEPRINT.md](BLUEPRINT.md) §11 dicentang semua, dan satu hari
 operasional penuh (pagi analytics → siang episode → malam report) berjalan tanpa campur tangan
 manual kecuali approval.
+
+**Status W10:** selesai, dengan tiga batas yang ditulis di jawaban command-nya sendiri:
+
+- **`/biz` membaca kantor, bukan menebak.** Counter hidup di `chat.db` dan ditulis
+  `server/biz-events.js`; sidecar memanggil `GET /biz-metrics`. Kantor yang mati dijawab "kantor
+  tidak menjawab" beserta alasannya, bukan laporan kosong yang terlihat seperti hari sepi.
+- **`/topselling` tidak punya sumber data.** `payment_events` tidak menyimpan `item_id` dan
+  `premium_items` tidak punya kolom penjualan, jadi command menyebutkan itu dan hanya melaporkan
+  jumlah item live/dicabut. Mengurutkan item berdasarkan harga lalu menyebutnya "terlaris" akan jadi
+  satu-satunya laporan palsu di kantor.
+- **`/leads` bergantung pada agent Sales yang belum ada** (W8 di atas). Command membaca `lead:*` di
+  SharedContext dan, bila kosong, mengatakan bahwa agent-nya belum ada.
+
+**Verifikasi W10:** selfcheck **193 PASS / 0 FAIL** (17 cek W10: SLA dari respons pertama, migrasi
+kolom lama, `/biz` lewat HTTP sungguhan + kantor mati, satu lead nyata, `/topselling` jujur, insiden
++ unban append-only, schedule/embargo, translations/approve-sub, reports/report-stats, dan 23
+command yang semuanya menjawab `handled`).
 
 ---
 

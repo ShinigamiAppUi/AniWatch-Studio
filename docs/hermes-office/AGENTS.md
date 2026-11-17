@@ -240,7 +240,7 @@ auto-fix di sini — yang membereskan tetap job `jobs.py`.
 #### 🎧 Support — Generic
 
 **Key:** `Support` · **Rumah:** Main Office · **Tools:** `triage_ticket`, `search_kb`,
-`draft_reply`, `send_reply`, `escalate`
+`draft_reply`, `send_reply`, `escalate`, `sla_stats`
 **Trigger:** `support_ticket`, `new_email`, SLA breach, `forward_to_support` dari UserReportAgent
 **Output:** tiket resolved atau dieskalasi
 **Handoff:** → Orchestrator (`ticket_unresolved`: alasan + 3 pesan terakhir)
@@ -264,6 +264,10 @@ tiket masuk → triage (kategori + prioritas) → kb.search(subject, top_k=3)
 - `send_reply` **benar-benar mengirim** lewat SMTP (`hermes_agents/mailer.py`, ENV-VARS.md §3b).
   Hasilnya menentukan status: terkirim → `pending` + counter `emails_sent`; gagal → tiket tetap `open`,
   alasan disimpan di context (`send_error`) dan di outbox, supaya kartu SLA berikutnya menagihnya.
+- `first_response_at` (W10) hanya diisi balasan terkirim pertama (`COALESCE`), dan `sla_stats()`
+  menghitung compliance tiket selesai + rata-rata respons dari kolom itu. Gauge
+  `sla_avg_response_min` yang `0` dengan sampel `0` berarti belum ada data; `/sla` menyebut jumlah
+  sampelnya supaya angka nol tidak terbaca sebagai respons instan.
 
 ---
 

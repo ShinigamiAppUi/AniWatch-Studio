@@ -1190,6 +1190,185 @@ def main() -> int:
           {'PaymentAgent', 'RevenueTracker', 'SecOps', 'EpisodeScheduler'} <= nodes,
           str(sorted(nodes)))
 
+    # 13. W10: the dashboard's numbers, and the rest of the chat ---------------
+    #     The panel itself is React (tests/biz-metrics-ui.test.ts); what is
+    #     checked here is the data it reads and the commands that answer from
+    #     the same rows.
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from hermes_bridge import db as bdb
+    from hermes_agents import store as bstore
+
+    # SLA: a reply that left is the first response; a failed send is not
+    early = support.triage_ticket('sc-w10-sla', 'pertanyaan biasa', user_id='sla@example.com',
+                                  now=now - 1800)
+    support.send_reply(early['id'], 'halo', to='sla@example.com', now=now - 1200,
+                       transport=_Mailbox())
+    support.resolve(early['id'], now=now - 600)
+    con.execute(
+        'INSERT INTO tickets (id, user_id, subject, status, received_at, sla_deadline, '
+        'resolved_at, first_response_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ('sc-w10-late', 'late@example.com', 'telat', 'resolved', now - 7200, now - 3600,
+         now - 3000, now - 7000, now - 3000),
+    )
+    con.commit()
+    stats = support.sla_stats(now=now)
+    # The W5 tickets in this same DB are resolved too, so the count is a floor;
+    # the exact average comes from the two replies this section planted.
+    check('w10: sla_stats measures first response, not resolution time',
+          stats['samples'] == 2 and stats['resolved'] >= 2 and stats['on_time'] >= 1
+          and stats['avg_response_min'] == 7
+          and (stats['compliance'] is None or 0.0 <= stats['compliance'] <= 1.0), str(stats))
+    first_response = con.execute('SELECT first_response_at FROM tickets WHERE id = ?',
+                                 (early['id'],)).fetchone()[0]
+    check('w10: send_reply records the first reply that actually left',
+          first_response == now - 1200, str(first_response))
+
+    # An older DB gets the new column without a destructive migration
+    legacy = tmp / 'legacy.db'
+    legacy_con = sqlite3.connect(str(legacy))
+    legacy_con.execute('CREATE TABLE tickets (id TEXT PRIMARY KEY)')
+    legacy_con.commit()
+    legacy_con.close()
+    bdb.migrate(legacy)
+    legacy_cols = {row[1] for row in sqlite3.connect(str(legacy)).execute(
+        'PRAGMA table_info(tickets)')}
+    check('w10: migrate() adds first_response_at to an older tickets table',
+          'first_response_at' in legacy_cols, str(sorted(legacy_cols)))
+
+    sla_reply = w7commands.handle_command('/sla', now=now)
+    tickets_reply = w7commands.handle_command('/tickets', now=now)
+    check('w10: /sla and /tickets answer from the ticket rows',
+          sla_reply.get('ok') is True and sla_reply['sla']['samples'] == 2
+          and 'Rata-rata respons pertama' in sla_reply.get('reply', '')
+          and tickets_reply.get('ok') is True
+          and tickets_reply['tickets'].get('resolved', 0) >= 2, str(sla_reply)[:160])
+
+    # /biz reads the office's door over HTTP - never the office DB directly
+    class _MetricsHandler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 - http.server's name
+            body = json.dumps({
+                'today': {'leads_qualified': 4, 'emails_sent': 9, 'tickets_resolved': 2,
+                          'tickets_pending': 1, 'crm_updates': 3, 'refunds_processed': 1,
+                          'chargebacks': 0},
+                'sla': {'avg_response_min': 7, 'breach_count': 1},
+                'agents_active': ['Support'],
+                'last_updated': '2026-11-17T07:03:00.000Z',
+            }).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):  # noqa: D102 - keep the selfcheck output clean
+            return
+
+    metrics_server = ThreadingHTTPServer(('127.0.0.1', 0), _MetricsHandler)
+    threading.Thread(target=metrics_server.serve_forever, daemon=True).start()
+    saved_office_url = os.environ.get('OFFICE_URL')
+    os.environ['OFFICE_URL'] = f'http://127.0.0.1:{metrics_server.server_address[1]}'
+    biz_reply = w7commands.handle_command('/biz', now=now)
+    check('w10: /biz reads GET /biz-metrics from a running office',
+          biz_reply.get('ok') is True and biz_reply['today']['leads_qualified'] == 4
+          and 'Hari ini' in biz_reply.get('reply', ''), str(biz_reply)[:200])
+    metrics_server.shutdown()
+    metrics_server.server_close()
+    os.environ['OFFICE_URL'] = 'http://127.0.0.1:9'
+    offline = w7commands.handle_command('/biz', now=now)
+    check('w10: a closed office is reported, not invented',
+          offline.get('ok') is False and 'tidak menjawab' in offline.get('reply', ''),
+          str(offline)[:160])
+    if saved_office_url is None:
+        os.environ.pop('OFFICE_URL', None)
+    else:
+        os.environ['OFFICE_URL'] = saved_office_url
+
+    # /leads: the keys only exist if a Sales agent wrote them
+    empty_leads = w7commands.handle_command('/leads', now=now)
+    check('w10: /leads says the Sales agent is the missing source',
+          empty_leads.get('ok') is True and 'Sales' in empty_leads.get('insufficient', '')
+          and 'Belum ada lead' in empty_leads.get('reply', ''), str(empty_leads)[:160])
+    bstore.context().set('lead:sc-1', {'name': 'Budi', 'stage': 'qualified'}, 'selfcheck')
+    one_lead = w7commands.handle_command('/leads', now=now)
+    check('w10: /leads lists what SharedContext really holds',
+          one_lead.get('ok') is True and one_lead['leads'] == ['lead:sc-1']
+          and 'Budi' in one_lead.get('reply', ''), str(one_lead)[:160])
+
+    # /topselling: no per-item sales source, and the command says so
+    selling = w7commands.handle_command('/topselling', now=now)
+    check('w10: /topselling states the missing sales source instead of ranking by price',
+          selling.get('ok') is True and 'item_id' in selling.get('insufficient', '')
+          and 'Ranking terlaris belum ada' in selling.get('reply', ''), str(selling)[:160])
+
+    # /incidents and /unban: the audit log, append-only
+    sec_ops.apply_rule('login_attempts', '10.9.9.9', 'ban_ip', 'selfcheck w10', now=now,
+                       actor='SecOps')
+    incident_reply = w7commands.handle_command('/incidents', now=now)
+    banned_rows = con.execute('SELECT COUNT(*) FROM security_incidents WHERE target = ?',
+                              ('10.9.9.9',)).fetchone()[0]
+    unban_reply = w7commands.handle_command('/unban 10.9.9.9', now=now)
+    unban_rows = con.execute('SELECT COUNT(*) FROM security_incidents WHERE target = ?',
+                             ('10.9.9.9',)).fetchone()[0]
+    check('w10: /incidents lists the rows /security summarises',
+          incident_reply.get('ok') is True and incident_reply['incidents'],
+          str(incident_reply)[:160])
+    check('w10: /unban adds a row, never deletes one',
+          unban_reply.get('ok') is True and unban_reply['was_banned'] is True
+          and not sec_ops.is_banned('10.9.9.9') and unban_rows == banned_rows + 1,
+          f'{unban_reply} rows {banned_rows}->{unban_rows}')
+    check('w10: /unban without a target asks for one',
+          w7commands.handle_command('/unban', now=now).get('ok') is False)
+
+    # /schedule and /embargo read the embargo queue
+    sched.schedule_episode(con, episode_id='sc-w10-embargo', anime_title='W10', episode_number=1,
+                           encoded_path='/tmp/w10.mp4', embargo_until=now + 3600)
+    schedule_reply = w7commands.handle_command('/schedule', now=now)
+    embargo_reply = w7commands.handle_command('/embargo sc-w10-embargo', now=now)
+    check('w10: /schedule and /embargo answer from episode_schedule',
+          schedule_reply.get('ok') is True and 'sc-w10-embargo' in schedule_reply.get('upcoming', [])
+          and embargo_reply.get('ok') is True
+          and embargo_reply['episode']['status'] == 'scheduled'
+          and 'scheduled' in embargo_reply.get('reply', ''), str(embargo_reply)[:160])
+
+    # /translations and /approve-sub: needs_review -> approved
+    bstore.upsert_track(con, 'sc-w10-subs', 'id', '/tmp/w10.id.srt', source='local',
+                        status='needs_review', qa_score=0.8, updated_at=now)
+    translations_reply = w7commands.handle_command('/translations', now=now)
+    handled_sub = w7commands.handle_command('/approve-sub sc-w10-subs', now=now)
+    sub_status = con.execute("SELECT status FROM subtitle_tracks WHERE episode_id = 'sc-w10-subs' "
+                             "AND lang = 'id'").fetchone()[0]
+    check('w10: /translations and /approve-sub move a real subtitle track',
+          translations_reply.get('ok') is True
+          and translations_reply['translations'].get('needs_review', 0) >= 1
+          and handled_sub.get('approved') == 1 and sub_status == 'approved',
+          f'{handled_sub} {sub_status}')
+    check('w10: /approve-sub without an id lists what needs review',
+          w7commands.handle_command('/approve-sub', now=now).get('ok') is True and sub_status == 'approved')
+
+    # /reports and /report-stats: today and the seven-day trend
+    con.execute(
+        'INSERT OR REPLACE INTO user_reports (id, user_id, episode_id, category, description, '
+        'status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ('rp-w10-1', 'u-w10', 'ep-w10', 'technical', 'video buffering terus', 'pending', now),
+    )
+    con.commit()
+    reports_reply = w7commands.handle_command('/reports', now=now)
+    stats_reply = w7commands.handle_command('/report-stats', now=now)
+    check('w10: /reports and /report-stats answer from user_reports',
+          reports_reply.get('ok') is True and reports_reply['reports'].get('pending', 0) >= 1
+          and stats_reply.get('ok') is True and sum(stats_reply['days'].values()) >= 1,
+          f'{reports_reply} {stats_reply}'[:200])
+
+    check('w10: every command in API-REFERENCE §6 is registered, and none answers nothing',
+          len(w7commands.COMMANDS) == 23
+          and {'/biz', '/leads', '/tickets', '/sla', '/topselling', '/incidents', '/unban',
+               '/schedule', '/embargo', '/translations', '/approve-sub', '/reports',
+               '/report-stats'} <= set(w7commands.COMMANDS)
+          and all(w7commands.handle_command(name, now=now).get('handled') is True
+                  for name in w7commands.COMMANDS))
+
     support.close()
 
     print()

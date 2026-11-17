@@ -8,8 +8,8 @@
  * opens them (src/components/BizMetricsPanel.tsx).
  *
  * Two sources, one shape: the panel fetches the endpoint when it opens, and
- * `biz_metric_update` (broadcast by the sidecar after every recorded event)
- * carries the same object, so the panel updates without a poll. Both go
+ * `biz_metric_update` (broadcast by the office server after every recorded
+ * metric POST) carries the same object, so the panel updates without a poll. Both go
  * through `parseBizMetrics`, because a number on screen should never be
  * `NaN`, `undefined` or a string from a half-written payload.
  */

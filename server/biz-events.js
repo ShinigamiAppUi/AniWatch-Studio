@@ -7,9 +7,9 @@
  * 2. `approval_response` (WebSocket): the one new message from the UI. A
  *    permission card's button is relayed to the FastAPI sidecar, where
  *    `bridge.wait_for_approval()` polls for it (docs/hermes-office/API-REFERENCE.md §4).
- * 3. `bizSlashCommand` (chat): the business slash commands the chat panel types —
- *    `/design`, `/pending-items`, `/approve` — are relayed to the sidecar's
- *    `POST /command`, because the work lives in Python (W7). Nothing is
+ * 3. `bizSlashCommand` (chat): the business slash commands the chat panel types
+ *    (W7, W9 and the rest of API-REFERENCE.md §6 in W10) are relayed to the
+ *    sidecar's `POST /command`, because the work lives in Python. Nothing is
  *    interpreted here: the reply is whatever the sidecar's agent said.
  *
  * Loaded by server/index.js, which passes in its `db`, `broadcast` and token
@@ -147,11 +147,24 @@ export const BIZ_SLASH_COMMANDS = [
   '/chargeback',
   '/security',
   '/takedown',
+  '/biz',
+  '/leads',
+  '/tickets',
+  '/sla',
+  '/topselling',
+  '/incidents',
+  '/unban',
+  '/schedule',
+  '/embargo',
+  '/translations',
+  '/approve-sub',
+  '/reports',
+  '/report-stats',
 ]
 
 /** One command line, so `/designfoo` stays an ordinary chat message */
 const BIZ_COMMAND_RE =
-  /^\/(design|pending-items|approve|revenue|payments|subscriptions|refunds|chargeback|security|takedown)(?:\s|$)/
+  /^\/(design|pending-items|approve|revenue|payments|subscriptions|refunds|chargeback|security|takedown|biz|leads|tickets|sla|topselling|incidents|unban|schedule|embargo|translations|approve-sub|reports|report-stats)(?:\s|$)/
 
 /** A chat line is short; the sidecar clamps again on its own side */
 const MAX_COMMAND_CHARS = 200

@@ -56,6 +56,10 @@ def migrate(path: Path | None = None) -> None:
         cols = {r['name'] for r in con.execute('PRAGMA table_info(tickets)')}
         if cols and 'assignee' not in cols:
             con.execute('ALTER TABLE tickets ADD COLUMN assignee TEXT')
+        # W10: the SLA gauge needs a measured first response, not a guess from
+        # `resolved_at` (resolution time is not response time)
+        if cols and 'first_response_at' not in cols:
+            con.execute('ALTER TABLE tickets ADD COLUMN first_response_at REAL')
         cols = {r['name'] for r in con.execute('PRAGMA table_info(premium_items)')}
         if cols and 'preview_dark' not in cols:
             con.execute('ALTER TABLE premium_items ADD COLUMN preview_dark TEXT')

@@ -189,13 +189,17 @@ class SupportAgent:
         result = mailer.send(recipient, line, reply, transport=transport, now=at)
 
         if result['sent']:
-            con.execute('UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?',
-                        ('pending', at, ticket_id))
+            # `COALESCE` keeps the first reply that left: the SLA gauge measures
+            # response time, so a later follow-up must not move the clock.
+            con.execute('UPDATE tickets SET status = ?, updated_at = ?, '
+                        'first_response_at = COALESCE(first_response_at, ?) WHERE id = ?',
+                        ('pending', at, at, ticket_id))
             con.commit()
             self._remember(ticket_id, {'reply': reply, 'replied_at': at, 'sent_to': recipient,
                                        'send_error': None})
             log.info('support: balasan tiket %s terkirim ke %s', ticket_id, recipient)
-            _report({'emails_sent': 1, 'tickets_pending': self.pending_count()})
+            _report({'emails_sent': 1, 'tickets_pending': self.pending_count(),
+                     'sla_avg_response_min': self.sla_stats(now=at)['avg_response_min']})
             return {'id': ticket_id, 'status': 'pending', 'reply': reply, 'sent': True,
                     'to': recipient, 'error': None}
 
@@ -221,7 +225,8 @@ class SupportAgent:
         if note:
             self._remember(ticket_id, {'resolution': _text(note, 400), 'resolved_at': at})
         log.info('support: tiket %s resolved', ticket_id)
-        _report({'tickets_resolved': 1, 'tickets_pending': self.pending_count()})
+        _report({'tickets_resolved': 1, 'tickets_pending': self.pending_count(),
+                 'sla_avg_response_min': self.sla_stats(now=at)['avg_response_min']})
         return {'id': ticket_id, 'status': 'resolved', 'resolved_at': at}
 
     def escalate(self, ticket_id: str, reason: str, now: float | None = None) -> dict:
@@ -319,7 +324,8 @@ class SupportAgent:
             (at,),
         ).fetchall()
         if not rows:
-            _report({'sla_breach_count': 0, 'tickets_pending': self.pending_count()})
+            _report({'sla_breach_count': 0, 'tickets_pending': self.pending_count(),
+                     'sla_avg_response_min': self.sla_stats(now=at)['avg_response_min']})
             return {'breaches': 0, 'decision': 'none', 'updated': 0}
 
         oldest_min = int((at - float(rows[0]['sla_deadline'])) // 60)
@@ -350,8 +356,42 @@ class SupportAgent:
             "SELECT COUNT(*) FROM tickets WHERE status IN ('open', 'pending') AND sla_deadline < ?",
             (at,),
         ).fetchone()[0]
-        _report({'sla_breach_count': int(remaining), 'tickets_pending': self.pending_count()})
+        _report({'sla_breach_count': int(remaining), 'tickets_pending': self.pending_count(),
+                 'sla_avg_response_min': self.sla_stats(now=at)['avg_response_min']})
         return {'breaches': len(rows), 'decision': decision, 'updated': updated}
+
+    def sla_stats(self, days: float = 7.0, now: float | None = None) -> dict:
+        """What `/sla` shows and what the `sla_avg_response_min` gauge carries.
+
+        Compliance is measured only on tickets that are closed: an open ticket
+        is not late yet, so it is counted separately as `late`. The average is
+        `first_response_at - received_at` over replies that actually left (a
+        failed send sets no `first_response_at`), so `avg_response_min: 0` with
+        `samples: 0` means "no data", not "instant reply".
+        """
+        at = time.time() if now is None else float(now)
+        since = at - float(days) * 86400.0
+        con = self.con()
+        closed = con.execute(
+            'SELECT received_at, resolved_at, sla_deadline, first_response_at FROM tickets '
+            'WHERE resolved_at IS NOT NULL AND resolved_at >= ?',
+            (since,),
+        ).fetchall()
+        pending = int(con.execute(
+            "SELECT COUNT(*) FROM tickets WHERE status IN ('open', 'pending')").fetchone()[0])
+        late = int(con.execute(
+            "SELECT COUNT(*) FROM tickets WHERE status IN ('open', 'pending') AND sla_deadline < ?",
+            (at,)).fetchone()[0])
+        on_time = sum(1 for row in closed if float(row['resolved_at']) <= float(row['sla_deadline']))
+        replies = [float(row['first_response_at']) - float(row['received_at'])
+                   for row in closed if row['first_response_at'] is not None]
+        return {
+            'days': float(days), 'resolved': len(closed), 'on_time': on_time,
+            'compliance': (on_time / len(closed)) if closed else None,
+            'pending': pending, 'late': late,
+            'avg_response_min': int(round(sum(replies) / len(replies) / 60.0)) if replies else 0,
+            'samples': len(replies),
+        }
 
     # -- shared context -----------------------------------------------------
 

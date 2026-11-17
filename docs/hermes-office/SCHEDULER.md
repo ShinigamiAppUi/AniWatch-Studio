@@ -78,6 +78,14 @@ SecOps dari `SECURITY_EVENT_FEED` saat dipanggil — bukan dari putaran schedule
 detik untuk SecOps justru akan membanjiri kantor (PLAN.md §Risiko), jadi kesebelas job di §2 tetap
 kesebelas.
 
+W10 juga tidak menambah job. Yang disebut W10 sudah aktif tanpa perubahan: `cache_warmer` 17.00
+(W6), `weekly_report` Senin 09.00 lewat Orchestrator (W6), `db_backup` 02.00 (W4), dan retensi
+berjalan dari trigger `retention_check` (`hermes_agents/retention.py`), bukan dari putaran berkala.
+Yang W10 tambahkan hanya datanya: Support mengirim gauge `tickets_pending`, `tickets_resolved`,
+`sla_avg_response_min` dan `sla_breach_count` setiap kali tiket berubah, sehingga panel **biz** dan
+`/biz` menampilkan angka yang bergerak — `/biz` membacanya lewat `GET /biz-metrics`, dan kantor yang
+mati dijawab sebagai kantor yang mati.
+
 `PENDING_JOBS` tetap ada dan **kosong** sekarang. Itu memang gunanya: job yang kerjanya belum ada
 ditulis di sana beserta alasannya, `start_scheduler()` menulis satu baris per entri saat start, dan
 `GET /health` mengembalikannya di `pending_jobs` — jadi yang belum ada terlihat sebagai belum ada,

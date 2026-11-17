@@ -197,8 +197,9 @@ def _payment_work(payload: object, char=None) -> dict:
 
 
 #: trigger -> the agent work that exists. Everything else only draws characters
-#: (`new_lead`/`form_submit`/`deal_stage_change` need the Sales agent, W10;
-#: `episode_released` announces through `pipeline.announce` after publishing).
+#: (`new_lead`/`form_submit`/`deal_stage_change` need the Sales agent, which no
+#: week has built - PLAN.md W8 leaves it open; `episode_released` announces
+#: through `pipeline.announce` after publishing).
 AGENT_HANDLERS = {
     'support_ticket': _support_work,
     'new_email': _support_work,

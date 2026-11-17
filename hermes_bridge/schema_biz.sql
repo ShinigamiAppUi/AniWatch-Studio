@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     received_at   REAL NOT NULL,
     sla_deadline  REAL NOT NULL,
     resolved_at   REAL,
+    first_response_at REAL,                  -- first reply that actually left (W10: SLA gauge)
     assignee      TEXT,
     kb_article_id TEXT,
     updated_at    REAL

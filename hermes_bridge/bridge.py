@@ -258,6 +258,29 @@ def agent_error(agent_id: str, error: str, retrying: bool = False) -> None:
         agent_done(agent_id, _clean(f'berhenti: {error}', MAX_STATUS))
 
 
+def get_biz_metrics(timeout: float = 3.0) -> dict:
+    """Read the office's own numbers (`GET /biz-metrics`), for `/biz`.
+
+    The counters live in the office DB (`chat.db`), written by
+    `server/biz-events.js`; the sidecar has no business opening that file, so
+    it asks the office over the same localhost door. Raises `BridgeError` when
+    the office is not answering: `/biz` must say that, not invent a report.
+    """
+    headers = {}
+    token = os.environ.get('OFFICE_TOKEN', '').strip()
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+    try:
+        res = httpx.get(f'{office_url()}/biz-metrics', headers=headers, timeout=timeout)
+        res.raise_for_status()
+        body = res.json()
+    except Exception as err:  # noqa: BLE001 - the caller turns this into a chat line
+        raise BridgeError(f'GET /biz-metrics gagal: {err}') from err
+    if not isinstance(body, dict):
+        raise BridgeError('GET /biz-metrics menjawab bukan object')
+    return body
+
+
 def update_biz_metrics(delta: dict) -> None:
     """Report counters (added) and gauges (replaced) - never through `/event`.
 

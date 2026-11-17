@@ -1,5 +1,47 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 4.0 — 17 Nov 2026 (W10: dashboard, SLA live, sisa slash command)
+
+### Ditambahkan
+
+- `webhook_server/commands.py`: 13 command terakhir API-REFERENCE §6 — `/biz`, `/leads`, `/tickets`,
+  `/sla`, `/topselling`, `/incidents`, `/unban`, `/schedule`, `/embargo`, `/translations`,
+  `/approve-sub`, `/reports`, `/report-stats` (total 23). Semuanya menjawab dari baris DB yang sama
+  yang ditulis agent, satu pesan maksimal enam baris.
+- `hermes_agents/support.py`: `sla_stats()` — compliance tiket selesai 7 hari, tiket lewat deadline,
+  rata-rata respons pertama beserta jumlah sampel. `send_reply()` mengisi `first_response_at`
+  sekali (`COALESCE`), dan gauge `tickets_pending` / `tickets_resolved` / `sla_avg_response_min` /
+  `sla_breach_count` dikirim setiap kali tiket berubah, jadi panel **biz** bergerak.
+- `hermes_bridge/bridge.py`: `get_biz_metrics()` — `/biz` membaca `GET /biz-metrics` milik kantor
+  (counter hidup di `chat.db`), dan kantor yang mati dijawab sebagai kantor yang mati.
+- `hermes_bridge/shared_context.py`: `recent(prefix, since)` — `/leads` butuh timestamp, bukan hanya
+  nilai; `find()` tetap dipakai handoff.
+- `tickets.first_response_at` di `schema_biz.sql`, dan `db.migrate()` menambahkannya ke DB lama
+  tanpa DROP (selfcheck W10 menguji tabel versi lama).
+- `/unban` menulis baris `unban` baru ke `security_incidents` (append-only, SECURITY §10).
+
+### Diubah
+
+- `server/biz-events.js`: `BIZ_SLASH_COMMANDS` + regex relai kini 23 command; `tests/biz-commands.test.ts`
+  memeriksa daftarnya dan bahwa `/unbanned`/`/slack` tetap pesan biasa.
+- Selfcheck: **193 PASS / 0 FAIL** (17 cek W10: SLA dari respons pertama, migrasi kolom lama,
+  `/biz` lewat HTTP sungguhan + kantor mati, satu lead nyata di SharedContext, `/topselling` yang
+  menyebut sumber data hilang, insiden + unban append-only, schedule/embargo, translations/approve-sub,
+  reports/report-stats, dan 23 command yang semuanya `handled`).
+- Komentar `webhook_server/triggers.py` tidak lagi bilang agent Sales datang "di W10": agent itu
+  belum ada (PLAN.md W8), dan `/leads` mengatakan hal yang sama ke pengguna.
+- Docstring panel/metrics: `biz_metric_update` dibroadcast **kantor**, bukan sidecar.
+- API-REFERENCE §6, DB-SCHEMA §2/§3/§12, AGENTS §4.1, SCHEDULER, PLAN W10 dan RELEASES diperbarui
+  dalam commit yang sama.
+
+### Catatan
+
+- Panel `BizMetricsPanel` dan `OrchestratorCard` sudah ada sebelum W10; yang W10 kerjakan adalah
+  membuat angkanya hidup dan sisa pintu chat-nya nyata. `/topselling` tidak mengurutkan item
+  berdasarkan harga lalu menyebutnya terlaris: penjualan per item tidak tercatat.
+
+---
+
 ## Rev 3.9 — 17 Nov 2026 (W9: Finance, Legal, Security)
 
 ### Ditambahkan

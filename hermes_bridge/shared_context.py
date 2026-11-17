@@ -99,6 +99,22 @@ class SharedContext:
             ).fetchall()
         return {r['key']: json.loads(r['value']) for r in rows}
 
+    def recent(self, prefix: str, since: float = 0.0) -> list[dict[str, Any]]:
+        """Keys starting with `prefix` written at or after `since`, newest first.
+
+        `find()` answers "everything", which is right for a handoff lookup and
+        wrong for a chat line that says "today": the timestamp is part of the
+        answer there, so it is returned with the value.
+        """
+        with self._lock, self._connect() as con:
+            rows = con.execute(
+                'SELECT key, value, owner, ts FROM context WHERE key LIKE ? AND ts >= ? '
+                'ORDER BY ts DESC',
+                (f'{prefix}%', float(since)),
+            ).fetchall()
+        return [{'key': r['key'], 'value': json.loads(r['value']), 'owner': r['owner'],
+                 'ts': r['ts']} for r in rows]
+
     def cleanup_older_than(self, hours: float = 24.0) -> int:
         """Delete rows last written more than `hours` ago; returns the count."""
         cutoff = time.time() - hours * 3600

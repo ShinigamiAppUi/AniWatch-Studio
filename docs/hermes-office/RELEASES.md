@@ -79,7 +79,7 @@ dengan DMCA cancel yang menang balapan dan penjaga duplikat. 37 cek lama di self
 | W7 | ~~DesignAgent (premium)~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.8 |
 | W8 | ~~`run_orchestrator`, protokol handoff, `handoff_check`~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.6 |
 | W9 | ~~Finance, Legal, Security: refund/chargeback end-to-end, DMCA otomatis~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.9 |
-| W10 | Dashboard lengkap, slash command sisanya (`/biz`, `/leads`, `/tickets`, `/sla`, `/topselling`, `/incidents`, `/unban`, `/schedule`, `/embargo`, `/translations`, `/approve-sub`, `/reports`, `/report-stats`) |
+| W10 | ~~Dashboard lengkap, slash command sisanya (`/biz`, `/leads`, `/tickets`, `/sla`, `/topselling`, `/incidents`, `/unban`, `/schedule`, `/embargo`, `/translations`, `/approve-sub`, `/reports`, `/report-stats`)~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 4.0. `/topselling` dan `/leads` menjawab dengan sumber data yang belum ada, bukan angka karangan |
 
 Job yang belum ada tercatat di `GET /health` → `pending_jobs`, bukan dijalankan sebagai no-op.
 Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
@@ -94,8 +94,14 @@ Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
 > (Rev 3.9): PaymentAgent + RevenueTracker (grace, refund ber-kartu, chargeback → SecOps), DMCA yang
 > membatalkan lewat handoff ke EpisodeScheduler, SecOps dengan `security_incidents`, dan
 > `/webhook/payment` yang benar-benar menjalankan agent — plus tujuh command finance/legal/security.
-> Yang tetap belum ada sesudahnya: dashboard dan sisa slash command (W10). Tag tetap menunjuk
-> commit rilis pertama; catatan lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5–3.9.
+> W10 ditutup (Rev 4.0): 13 command terakhir, gauge SLA dari `first_response_at`, dan `/biz` yang
+> membaca `GET /biz-metrics` milik kantor. Tag tetap menunjuk commit rilis pertama; catatan
+> lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5–4.0.
+>
+> **Masih belum ada setelah W10:** agent Sales dan Marketing (PLAN.md W8), sehingga `new_lead`,
+> `form_submit`, `deal_stage_change` hanya menggambar karakter; tidak ada penjualan per item, jadi
+> `/topselling` tidak punya ranking; belum ada endpoint purge CDN. Semuanya disebut di jawaban
+> command atau hasil agent yang bersangkutan, bukan disembunyikan.
 
 ### Cara menjalankan
 

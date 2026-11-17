@@ -560,11 +560,13 @@ Ditangani di `server/index.js` sebelum event diproses.
 
 ### Bisnis (baru)
 
-Didaftarkan di chat routing yang sama. Format: `<command> [arg]`. **Sudah hidup:** W7 — `/design`,
-`/pending-items`, `/approve`; W9 — `/revenue`, `/payments`, `/subscriptions`, `/refunds`,
-`/chargeback`, `/security`, `/takedown`. Base command di `server/index.js` menang lebih dulu, lalu
-baris yang cocok direlai `bizSlashCommand()` ke sidecar `POST /command`. Sisanya di tabel bawah ini
-masih rencana (W10), dan kantor tidak mengaku menjalankannya.
+Didaftarkan di chat routing yang sama. Format: `<command> [arg]`. **Sudah hidup (W7–W10, 23
+command):** W7 — `/design`, `/pending-items`, `/approve`; W9 — `/revenue`, `/payments`,
+`/subscriptions`, `/refunds`, `/chargeback`, `/security`, `/takedown`; W10 — sisanya di tabel
+bawah. Base command di `server/index.js` menang lebih dulu, lalu baris yang cocok direlai
+`bizSlashCommand()` ke sidecar `POST /command`. `BIZ_SLASH_COMMANDS` (`server/biz-events.js`) dan
+`COMMANDS` (`webhook_server/commands.py`) memuat daftar yang sama; `tests/biz-commands.test.ts` dan
+selfcheck W10 memeriksanya.
 
 | Command W9 | Output | Sumber data |
 | --- | --- | --- |
@@ -576,32 +578,26 @@ masih rencana (W10), dan kantor tidak mengaku menjalankannya.
 | `/security` | insiden 24 jam + status feed + chargeback per akun | `security_incidents`, `payment_events` |
 | `/takedown [episode_id] [alasan]` | verifikasi + catat + handoff ke EpisodeScheduler | `dmca_requests`, `episode_schedule` |
 
-| Command | Output | Sumber data |
+| Command W10 | Output | Sumber data |
 | --- | --- | --- |
-| `/biz` | ringkasan bisnis hari ini | `GET /biz-metrics` |
-| `/leads` | lead yang diproses hari ini | `shared_context` key `lead:*` |
-| `/tickets` | tiket terbuka | `tickets` |
-| `/sla` | compliance + yang lewat deadline | `tickets.sla_deadline` |
-| `/revenue` | pemasukan hari ini + minggu ini | `payment_events`, `biz_metrics` |
-| `/topselling` | item premium terlaris | `premium_items` + penjualan |
-| `/payments` | ringkasan payment hari ini | `payment_events` |
-| `/subscriptions` | subscription aktif + grace period | `subscription_status` |
-| `/refunds` | refund menunggu approval | `payment_events` status pending |
-| `/chargeback` | log chargeback terbaru | `payment_events` |
-| `/security` | ancaman 24 jam | log SecOps |
-| `/incidents` | insiden + aksi | log incident |
-| `/unban [ip/user]` | manual unban | SecOps rule store |
-| `/design [type] [tema]` | trigger Design Agent | Orchestrator |
-| `/pending-items` | desain menunggu approval | `premium_items` |
-| `/approve [id]` | approve item | `premium_items` → Publisher |
-| `/schedule` | antrian + estimasi live | `episode_schedule` |
-| `/embargo [episode_id]` | detail embargo | `episode_schedule` |
-| `/cancel-schedule [id]` | batalkan schedule | `episode_schedule` |
-| `/takedown [id] [alasan]` | DMCA: cancel atau unpublish + audit | `dmca_requests` → EpisodeScheduler |
-| `/translations` | status terjemahan | `subtitle_tracks` |
-| `/approve-sub [episode_id]` | approve subtitle | `subtitle_tracks` |
-| `/reports` | laporan user hari ini | `user_reports` |
-| `/report-stats` | tren 7 hari | `user_reports` |
+| `/biz` | counter hari ini, SLA, siapa yang bekerja. **Butuh kantor berjalan**: tanpa `GET /biz-metrics` jawabannya alasan, bukan angka | `GET /biz-metrics` (`chat.db`) |
+| `/leads` | `lead:*` hari ini. Tanpa key: menyebut agent Sales belum ada | SharedContext `lead:*` |
+| `/tickets` | jumlah per status + 3 tiket terbuka terbaru | `tickets` |
+| `/sla` | compliance tiket selesai (7 hari), yang lewat deadline, rata-rata respons pertama + jumlah sampel | `tickets` |
+| `/topselling` | jumlah item live/dicabut. **Tidak ada ranking**: penjualan per item tidak tercatat | `premium_items`, `payment_events` |
+| `/incidents` | 10 baris `security_incidents` terakhir | `security_incidents` |
+| `/unban <ip\|user>` | baris `unban` baru, bukan delete | `security_incidents` |
+| `/schedule` | antrean embargo + tiga yang publish berikutnya | `episode_schedule` |
+| `/embargo [episode_id]` | detail satu schedule, atau daftar yang menunggu | `episode_schedule` |
+| `/translations` | track per status + episode yang perlu review | `subtitle_tracks` |
+| `/approve-sub <episode_id>` | `needs_review` → `approved`; tanpa id → daftar episode | `subtitle_tracks` |
+| `/reports` | laporan user hari ini per status dan kategori | `user_reports` |
+| `/report-stats` | tren 7 hari per hari + per kategori | `user_reports` |
+
+`/cancel-schedule [id]` dari rancangan lama **tidak** didaftarkan: pintunya `/takedown`, yang mencatat
+audit DMCA sebelum membatalkan. Dua command untuk satu efek hanya membuat audit punya dua bentuk.
+`/topselling` dan `/leads` adalah jawaban jujur tentang data yang belum ada, bukan laporan palsu:
+kantor hanya menampilkan angka yang bisa diperiksa di DB.
 
 Aturan respons: **satu pesan chat, maksimal 6 baris.** Command yang butuh daftar panjang
 mengirim ringkasan + "…dan N lainnya" (chat panel bukan dashboard). Detail lengkap tetap di

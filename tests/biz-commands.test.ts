@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 describe('BIZ_SLASH_COMMANDS', () => {
-  it('is the commands W7 and W9 add, as API-REFERENCE.md §6 lists them', () => {
+  it('is every business command API-REFERENCE.md §6 lists', () => {
     expect(BIZ_SLASH_COMMANDS).toEqual([
       '/design',
       '/pending-items',
@@ -34,7 +34,31 @@ describe('BIZ_SLASH_COMMANDS', () => {
       '/chargeback',
       '/security',
       '/takedown',
+      '/biz',
+      '/leads',
+      '/tickets',
+      '/sla',
+      '/topselling',
+      '/incidents',
+      '/unban',
+      '/schedule',
+      '/embargo',
+      '/translations',
+      '/approve-sub',
+      '/reports',
+      '/report-stats',
     ])
+  })
+
+  it('relays a W10 command with its argument, and leaves a lookalike alone', async () => {
+    const fetchFn = stubFetch(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ reply: '🔓 10.0.0.1 dibuka' }),
+    }))
+    await expect(bizSlashCommand('/unban 10.0.0.1')).resolves.toBe('🔓 10.0.0.1 dibuka')
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    await expect(bizSlashCommand('/unbanned 10.0.0.1')).resolves.toBeNull()
+    await expect(bizSlashCommand('/slack')).resolves.toBeNull()
   })
 })
 

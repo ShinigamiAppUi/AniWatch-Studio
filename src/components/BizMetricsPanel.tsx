@@ -1,8 +1,8 @@
 /**
  * BizMetricsPanel - the status strip's "biz" popover: today's business
  * counters, the SLA figures and who is working, from GET /biz-metrics
- * (webhook_server/main.py) plus the `biz_metric_update` the sidecar
- * broadcasts after every recorded event.
+ * (server/biz-events.js) plus the `biz_metric_update` the office server
+ * broadcasts after every metric the sidecar posts.
  *
  * It fetches each time it opens and every 30 s while it stays open, the way
  * TodayPanel does, so a page left alone still catches up; a live update that

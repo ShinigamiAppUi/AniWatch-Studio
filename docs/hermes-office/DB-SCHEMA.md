@@ -87,6 +87,11 @@ Gauge (`*_pending`, `*_avg_*`, `*_breach_count`) dikirim sebagai **nilai absolut
 dengan `SET value = excluded.value`, bukan ditambah. Delta vs gauge dibedakan di `biz-events.js`
 lewat daftar `GAUGE_KEYS`; jangan campur di satu payload.
 
+`tickets_resolved`, `tickets_pending` dan `sla_avg_response_min` dikirim Support setiap kali tiket
+berubah (W10); `sla_avg_response_min` yang `0` bersama `samples: 0` di `/sla` berarti belum ada
+balasan terkirim yang bisa diukur. `leads_qualified` dan `crm_updates` tetap 0 karena agent Sales
+belum ada (PLAN.md W8) — panel menampilkan 0, bukan angka karangan.
+
 ---
 
 ## 3. `tickets` — Support
@@ -103,6 +108,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     received_at  REAL NOT NULL,
     sla_deadline REAL NOT NULL,
     resolved_at  REAL,
+    first_response_at REAL,                 -- balasan pertama yang benar-benar terkirim (W10)
     assignee     TEXT,
     kb_article_id TEXT,
     updated_at   REAL
@@ -112,8 +118,12 @@ CREATE INDEX IF NOT EXISTS idx_tickets_sla ON tickets (status, sla_deadline);
 ```
 
 **Writer:** `SupportAgent.triage_ticket()` (baris baru), `check_sla_breaches()` (extend deadline /
-resolve), `SupportAgent.resolve()`. · **Reader:** `check_sla_breaches`, `/tickets`, `/sla`, gauge
-`tickets_pending` / `sla_*`.
+resolve), `SupportAgent.resolve()`, `send_reply()` (`first_response_at` sekali, lewat `COALESCE`). ·
+**Reader:** `check_sla_breaches`, `sla_stats`, `/tickets`, `/sla`, gauge `tickets_pending` / `sla_*`.
+
+`first_response_at` hanya diisi balasan yang **terkirim**; balasan yang gagal tidak menggeser jam.
+Gauge `sla_avg_response_min` = rata-rata `first_response_at - received_at` untuk tiket yang selesai
+dalam 7 hari; `0` dengan sampel `0` berarti belum ada data, bukan respons instan.
 
 Alur status: `open → pending → resolved | escalated`. `escalated` wajib punya `assignee`; tiket
 `resolved` wajib punya `resolved_at`.
@@ -376,7 +386,9 @@ CREATE INDEX IF NOT EXISTS idx_context_ts ON context (ts);
 ```
 
 **Writer:** agent mana pun lewat `ctx.set()` / `ctx.update()` / `handoff.hand_off()`.
-· **Reader:** agent penerima lewat `ctx.get()` / `ctx.find()` / `handoff.take()`; cleanup job 03.00.
+· **Reader:** agent penerima lewat `ctx.get()` / `ctx.find()` / `ctx.recent()` / `handoff.take()`;
+cleanup job 03.00. `recent(prefix, since)` (W10) dipakai `/leads`, yang butuh `ts` untuk "hari ini"
+dan bukan hanya nilainya.
 
 Key yang dipakai (konvensi, bukan constraint):
 
@@ -422,8 +434,13 @@ def migrate() -> None:
     cols = {r["name"] for r in con.execute("PRAGMA table_info(tickets)")}
     if "assignee" not in cols:
         con.execute("ALTER TABLE tickets ADD COLUMN assignee TEXT")
+    if "first_response_at" not in cols:
+        con.execute("ALTER TABLE tickets ADD COLUMN first_response_at REAL")
         con.commit()
 ```
+
+`first_response_at` masuk di W10; `migrate()` menambahkannya ke `tickets` lama tanpa menyentuh baris
+yang sudah ada (selfcheck W10 menguji tabel lama).
 
 Aturan migrasi: **tidak pernah** `DROP TABLE` atau `DROP COLUMN` otomatis. Perubahan destruktif
 ditulis sebagai skrip manual di `scripts/migrations/` dan dijalankan dengan persetujuan manusia.
