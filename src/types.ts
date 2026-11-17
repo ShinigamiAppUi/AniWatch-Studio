@@ -129,6 +129,8 @@ export interface NeedsYou {
   toolName?: string
   summary?: string
   message?: string
+  /** The business approval's button labels (src/bizApproval.ts) */
+  options?: string[]
   notificationType?: string
   promptId?: string
   since?: number
@@ -285,7 +287,10 @@ export interface ServerHealth {
 }
 
 export interface OfficeEvent {
-  type: 'agent_spawned' | 'agent_working' | 'agent_completed' | 'mcp_call' | 'mcp_done' | 'new_hire' | 'chat_message' | 'chat_typing' | 'chat_reaction' | 'chat_seen' | 'inbox_update' | 'variant_change' | 'session_started' | 'session_ended' | 'session_status' | 'agent_status' | 'snapshot'
+  type: 'agent_spawned' | 'agent_working' | 'agent_completed'
+    // A business agent's raised hand and the note that its answer was taken
+    | 'agent_waiting' | 'agent_approval_done'
+    | 'mcp_call' | 'mcp_done' | 'new_hire' | 'chat_message' | 'chat_typing' | 'chat_reaction' | 'chat_seen' | 'inbox_update' | 'variant_change' | 'session_started' | 'session_ended' | 'session_status' | 'agent_status' | 'snapshot'
     // The turn events (UserPromptSubmit, Stop, PermissionRequest/Notification, StopFailure, Pre/PostCompact, CwdChanged, PostModelSwitch),
     // session_main (a server-side change: a hand lowered by a tool result or the timeout) and
     // session_tool_done (main-thread PostToolUse / PostToolBatch, the input that lowers a hand)
@@ -334,6 +339,8 @@ export interface OfficeEvent {
   toolName?: string
   summary?: string
   message?: string
+  /** A business approval's button labels (agent_waiting, src/bizApproval.ts) */
+  options?: string[]
   notificationType?: string
   needsYou?: NeedsYou
   // session_tool_done

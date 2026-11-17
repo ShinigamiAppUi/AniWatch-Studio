@@ -211,7 +211,9 @@ ws.on('message', data => { handleBizWsMessage(data, { trusted }) })
 | `agent_spawned` | agent mulai | `agent: {id, name, role, task}` |
 | `agent_working` | tool call | `agentId`, `status`, `tool`, `failed?` |
 | `agent_completed` | selesai | `agentId`, `result` |
-| — | gagal / minta approval | **tidak ada tipe baru**: keduanya `agent_working` dengan `failed: true` atau status `✋ …` (§3.1) |
+| `agent_waiting` | minta approval (bisnis) | `agentId`, `message`, `options[]` |
+| `agent_approval_done` | jawaban sudah diterima / timeout | `agentId` |
+| — | gagal | `agent_working` dengan `failed: true` (tidak ada tipe `agent_error`) |
 | `biz_metric_update` | metric berubah | `metrics` (bentuk §2) |
 | `chat_message`, `permission_request`, `signal`, … | base | lihat `docs/reference.md` |
 
@@ -222,9 +224,9 @@ ws.on('message', data => { handleBizWsMessage(data, { trusted }) })
 | `approval_response` | `{agentId, decision}` | diteruskan `biz-events.js` → sidecar |
 | lainnya | base | tidak berubah |
 
-**Istilah:** `agent_error(...)` dan `agent_waiting(...)` adalah nama *fungsi bridge*
-(`hermes_bridge/bridge.py`), bukan tipe event. Di kabel keduanya `agent_working`
-(+`failed: true`, atau status `✋ …`), karena `KNOWN_EVENT_TYPES` base tidak berubah.
+**Istilah:** `agent_waiting(...)` adalah fungsi bridge **dan** tipe event-nya. `agent_error(...)`
+hanya nama fungsi: di kabel ia `agent_working` + `failed: true`, karena base tidak punya tipe
+`agent_error`.
 
 `approval_response` adalah **satu-satunya** pesan baru dari UI. Kalau sidecar mati, WS tetap
 menerima pesan dan hanya menulis warning — UI tidak boleh menggantung.
@@ -301,20 +303,28 @@ langsung mengirim `agent_completed` dengan hasil `berhenti: …`, jadi karakter 
 **Dipanggil oleh:** `bridge.agent_error()`. Base tidak punya tipe `agent_error`, dan fork ini tidak
 menambahkannya.
 
-#### tangan naik ✋ — juga `agent_working`
+#### `agent_waiting` — tangan naik ✋ dan kartu tombol
 
 ```json
 {
-  "type": "agent_working",
-  "agentId": "payment-9f8e7d",
-  "status": "✋ Refund Rp 149.000 dari user 42, dibeli 3 hari lalu"
+  "type": "agent_waiting",
+  "agentId": "paymentagent-9f8e7d",
+  "message": "Refund Rp 149.000 dari user 42, dibeli 3 hari lalu",
+  "options": ["Approve Refund", "Tolak", "Minta Info Lebih"]
 }
 ```
 
-**Efek visual (W2):** bubble status berisi ✋; tidak ada card di UI. Card dengan satu tombol per
-`options` **belum dibangun** — itu bagian W10 (PLAN.md). Yang sudah berjalan: `wait_for_approval()`
-mem-poll sidecar, dan `POST /approval-callback` (dipanggil `biz-events.js` saat kelak ada
-`approval_response` dari UI) mengisi mailbox itu.
+**Efek visual:** karakter menampilkan bubble `✋ <message>`, dan panel chat menampilkan satu kartu
+(`src/components/BizApprovalCards.tsx`, state di `src/bizApproval.ts`) dengan satu tombol per
+`options` — maksimal 6 label, 80 karakter masing-masing.
+
+**Jawaban:** tombol mengirim `approval_response` lewat WS. Server meneruskannya ke sidecar
+(`POST /approval-callback`) **hanya dari socket `trusted`**; halaman read-only tetap melihat kartu
+tapi tanpa tombol. Agent mengambil jawaban lewat `wait_for_approval()`.
+
+**Kartu hilang** saat bridge mengirim `agent_approval_done` (jawaban diterima atau timeout) atau saat
+agent selesai (`agent_completed`). Kartu **tidak** disimpan server: reload halaman menghapus kartu
+yang masih terbuka — agent tetap menunggu sampai timeout.
 
 **Dipanggil oleh:** `bridge.agent_waiting()` — **sebelum** `wait_for_approval()`, tidak pernah
 sesudahnya.
@@ -425,8 +435,9 @@ bridge.agent_update(aid, "Menerjemahkan via DeepL...", tool="translate_text")
 
 ### `agent_waiting(agent_id, message, options) -> None`
 
-Menaikkan tangan ✋ lewat bubble status (`agent_working`); `options` divalidasi dan disimpan bridge
-untuk card di W10. **Wajib dipanggil sebelum** `wait_for_approval` — kalau dibalik, agent polling
+Mengirim `agent_waiting` (`message` + `options`), jadi karakter menaikkan tangan ✋ dan kartu
+tombol muncul di panel chat. `options` wajib 1–6 label; labelnya yang dikembalikan
+`wait_for_approval`. **Wajib dipanggil sebelum** `wait_for_approval` — kalau dibalik, agent polling
 untuk card yang belum pernah muncul (fix Rev 3 #1).
 
 ```python

@@ -87,6 +87,12 @@ export interface AgentSocketResult {
    * Dropped while the socket is closed: a tap is only worth sharing live.
    */
   shareInteraction: (item: string) => void
+  /**
+   * Answer a business approval card: sends `approval_response` (agent id +
+   * the button's label). Relayed to the sidecar by the server, and only from a
+   * trusted socket. Dropped while the socket is closed.
+   */
+  answerApproval: (agentId: string, decision: string) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -483,5 +489,15 @@ export function useAgentSocket(options: AgentSocketOptions = {}): AgentSocketRes
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'interact', item }))
   }, [])
 
-  return { connected, mcpServers, events, offline, sessions, trusted, shareInteraction }
+  /**
+   * Answer a business approval card (src/bizApproval.ts). The server relays it
+   * to the sidecar and only for a trusted socket, so a read-only page sending
+   * one changes nothing — hence the card hides its buttons there.
+   */
+  const answerApproval = useCallback((agentId: string, decision: string) => {
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'approval_response', agentId, decision }))
+  }, [])
+
+  return { connected, mcpServers, events, offline, sessions, trusted, shareInteraction, answerApproval }
 }

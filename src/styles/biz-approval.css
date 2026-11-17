@@ -1,0 +1,88 @@
+/* Business approvals — the cards beside the chat column. */
+
+.biz-approvals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.biz-approval {
+  border: 2px solid #f59e0b;
+  border-radius: 8px;
+  background: #1a1c22;
+  padding: 10px 12px;
+  color: #e7e9ee;
+}
+
+.biz-approval-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.biz-approval-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.biz-approval-agent {
+  text-transform: none;
+}
+
+.biz-approval-tag {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.biz-approval-message {
+  margin: 6px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #cfd3db;
+}
+
+.biz-approval-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.biz-approval-button {
+  flex: 1 1 auto;
+  min-width: 84px;
+  padding: 6px 8px;
+  border: 1px solid #3a3f4a;
+  border-radius: 6px;
+  background: #262a32;
+  color: #e7e9ee;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.biz-approval-button:hover:not(:disabled) {
+  background: #313641;
+}
+
+.biz-approval-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.biz-approval-button[aria-pressed='true'] {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.biz-approval-readonly,
+.biz-approval-sent {
+  margin: 4px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+}

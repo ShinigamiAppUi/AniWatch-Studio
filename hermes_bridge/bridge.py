@@ -145,12 +145,14 @@ def agent_waiting(agent_id: str, message: str, options: Iterable[str]) -> None:
     labels = [_clean(o, 80) for o in options if str(o).strip()][:6]
     if not labels:
         raise ValueError('agent_waiting needs at least one option label')
-    # No new event type exists for this: a raised hand is the agent's status
-    # bubble (the permission card is W10). `wait_for_approval` does the waiting.
+    # `agent_waiting` carries the question *and* its buttons, so the office can
+    # draw the card (src/bizApproval.ts). The answer comes back through the
+    # sidecar, which `wait_for_approval` polls.
     _post({
-        'type': 'agent_working',
+        'type': 'agent_waiting',
         'agentId': agent_id,
-        'status': _clean(f'✋ {message}', MAX_STATUS),
+        'message': _clean(message, MAX_STATUS),
+        'options': labels,
     })
 
 
@@ -168,12 +170,19 @@ def wait_for_approval(agent_id: str, timeout: float = 300) -> str:
             res.raise_for_status()
             decision = (res.json() or {}).get('decision')
             if decision:
+                _approval_done(agent_id)
                 return str(decision)
         except Exception as err:  # noqa: BLE001 - a sleeping sidecar means "not yet"
             log.debug('bridge: approval poll failed: %s', err)
         if time.monotonic() >= deadline:
+            _approval_done(agent_id)
             return 'timeout'
         time.sleep(min(APPROVAL_POLL_S, max(0.0, deadline - time.monotonic())))
+
+
+def _approval_done(agent_id: str) -> None:
+    """Take the card off the office: the wait is over, answered or timed out."""
+    _post({'type': 'agent_approval_done', 'agentId': agent_id})
 
 
 def agent_done(agent_id: str, result: str = 'done') -> None:

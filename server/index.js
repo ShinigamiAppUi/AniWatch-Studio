@@ -1470,6 +1470,10 @@ const KNOWN_EVENT_TYPES = new Set([
   'agent_spawned',
   'agent_working',
   'agent_completed',
+  // Business team (src/bizApproval.ts, hermes_bridge/bridge.py): a raised hand
+  // with its option labels, and the note that the answer was taken
+  'agent_waiting',
+  'agent_approval_done',
   'agent_linked',
   'agent_started',
   'mcp_call',
@@ -1759,6 +1763,12 @@ function relaySignals(body, signals) {
     recordActivity(agentId ?? (body.sessionId ? mainActivityId(body.sessionId) : null), { kind: 'status', text: `${record.kind}${shown ? ` ${shown}` : ''}` }, at)
     broadcast({ type: 'signal', ...publicSignal(record), timestamp: at })
   }
+}
+
+/** The button labels a business agent offered: at most six, 80 characters each */
+function sanitiseOptions(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw.slice(0, 6).map(o => clampString(o, 80)).filter(Boolean)
 }
 
 function validateEvent(body) {
@@ -2129,6 +2139,8 @@ app.post('/event', requireToken, (req, res) => {
     nonce:            clampString(body.nonce, 64),
     permissionMode:   clampString(body.permissionMode, 40),
     suggestions:      body.type === 'session_needs_you' ? sanitiseSuggestions(body.suggestions) : undefined,
+    // A business approval's buttons: labels only, at most six (src/bizApproval.ts)
+    options:          body.type === 'agent_waiting' ? sanitiseOptions(body.options) : undefined,
     error:            clampString(body.error, 40),
     detail:           clampString(body.detail, body.type === 'session_needs_you' ? 400 : MAX_STRING_LEN),
     phase:            body.phase === 'pre' || body.phase === 'post' ? body.phase : undefined,
@@ -3204,6 +3216,31 @@ function applyEvent(body) {
       return { type: 'agent_spawned', agent: record, timestamp: Date.now() }
     }
 
+    case 'agent_waiting': {
+      // A business agent raised its hand. The card lives in the page
+      // (src/bizApproval.ts); the agent's bubble shows the message here.
+      const id = lookupAgentId(body.agentId)
+      if (!id) return null
+      const agent = activeAgents.get(id)
+      if (agent) {
+        agent.lastActivityAt = Date.now()
+        agent.status = clampString(body.message)
+      }
+      return {
+        type: 'agent_waiting',
+        agentId: id,
+        message: clampString(body.message),
+        options: sanitiseOptions(body.options),
+        timestamp: Date.now(),
+      }
+    }
+
+    case 'agent_approval_done': {
+      // The answer reached the sidecar: the page may drop the card
+      const id = lookupAgentId(body.agentId)
+      return id ? { type: 'agent_approval_done', agentId: id, timestamp: Date.now() } : null
+    }
+
     case 'agent_linked': {
       touchSession(body)
       const id = lookupAgentId(body.agentId)
@@ -4243,6 +4280,10 @@ const LAN_EVENT_RULES = {
   office_interaction: eventFields(['item', 'by']),
   agent_working: eventFields(['agentId', 'sessionId', 'failed']),
   agent_completed: eventFields(['agentId', 'sessionId', 'tokens', 'durationMs', 'toolUses', 'model']),
+  // A business approval: the phone sees the raised hand, never the question or
+  // its button labels (they name a customer, an amount, an order)
+  agent_waiting: eventFields(['agentId']),
+  agent_approval_done: eventFields(['agentId']),
   mcp_call: eventFields(['server', 'tool', 'agentId', 'sessionId']),
   mcp_done: eventFields(['server', 'agentId', 'sessionId', 'reason']),
   session_started: sessionEventRule,
@@ -4296,7 +4337,8 @@ const LAN_EVENT_RULES = {
  *   session events  text, messageId, title, project, cwd, oldCwd, summary,
  *                   message, detail, wakeupStatus, each background task's
  *                   description
- *   agent events    agent_working.status, agent_completed.result, project
+ *   agent events    agent_working.status, agent_completed.result, project,
+ *                   agent_waiting.message and .options
  *   chat_message    text, system rows included ('' — the row's sender, role
  *                   and recipient stay, so a directed message still flies)
  *   permissions     summary, detail, suggestions, callKey, project, cwd,

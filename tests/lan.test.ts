@@ -189,6 +189,8 @@ const PAYLOADS: Record<string, Message> = {
   agent_spawned: { type: 'agent_spawned', agent: AGENT, project: `${SECRET}proj`, cwd: `/x/${SECRET}`, sessionId: SID, timestamp: 1 },
   agent_working: { type: 'agent_working', agentId: 'a1', status: `running: ${SECRET}`, failed: true, sessionId: SID, project: `${SECRET}proj`, timestamp: 1 },
   agent_completed: { type: 'agent_completed', agentId: 'a1', result: `${SECRET} done`, tokens: 5, durationMs: 9, sessionId: SID, timestamp: 1 },
+  agent_waiting: { type: 'agent_waiting', agentId: 'a1', message: `${SECRET} refund?`, options: [`Approve ${SECRET}`, 'Reject'], timestamp: 1 },
+  agent_approval_done: { type: 'agent_approval_done', agentId: 'a1', timestamp: 1 },
   mcp_call: { type: 'mcp_call', server: 'github', tool: 'create_issue', agentId: 'mcp-1', sessionId: SID, timestamp: 1 },
   mcp_done: { type: 'mcp_done', server: 'github', sessionId: SID, timestamp: 1 },
   session_started: { type: 'session_started', ...SESSION, timestamp: 1 },

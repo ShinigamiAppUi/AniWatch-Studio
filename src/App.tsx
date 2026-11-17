@@ -16,6 +16,8 @@ import SessionStrip from './components/SessionStrip'
 import Meters from './components/Meters'
 import AgentCard from './components/AgentCard'
 import PermissionCards from './components/PermissionCard'
+import BizApprovalCards from './components/BizApprovalCards'
+import { reduceBizApprovals, type BizApproval, type BizApprovalAction } from './bizApproval'
 import { isPermissionEvent, reducePermissions, setUiToken, type PermissionAction, type PermissionCardState } from './permissions'
 import StatusStrip from './components/StatusStrip'
 import SettingsPanel from './components/SettingsPanel'
@@ -772,11 +774,20 @@ const App: React.FC = () => {
   const [permissionCards, setPermissionCards] = useState<PermissionCardState[]>([])
   const dispatchPermissions = useCallback((action: PermissionAction) => setPermissionCards(prev => reducePermissions(prev, action)), [])
 
+  // Business approval cards (src/bizApproval.ts): their own state beside the
+  // permission cards. `agent_waiting` also goes on to the office reducer so the
+  // agent's character shows the raised hand.
+  const [bizApprovals, setBizApprovals] = useState<BizApproval[]>([])
+  const dispatchBizApprovals = useCallback((action: BizApprovalAction) => setBizApprovals(prev => reduceBizApprovals(prev, action)), [])
+
   const handleEvent = useCallback((action: OfficeAction) => {
     // permission_request / _extended / _resolved are the cards' alone; the
     // snapshot also hands over the UI token and the pending list, then goes
     // on to the office reducer as before
     if (isPermissionEvent(action)) { dispatchPermissions(action); return }
+    // Business approvals: the card list handles these, and agent_waiting still
+    // reaches the office reducer below (the character raises its hand)
+    if (action.type === 'agent_waiting' || action.type === 'agent_approval_done') dispatchBizApprovals(action)
     // Another page tapped a piece of furniture: the same errand plays here
     if (action.type === 'office_interaction') { handleFurnitureClickRef.current(action.item, true); return }
     if (action.type === 'snapshot') { setUiToken(action.uiToken); dispatchPermissions(action) }
@@ -823,7 +834,7 @@ const App: React.FC = () => {
   // WebSocket connection
   // ---------------------------------------------------------------------------
 
-  const { sessions, trusted, connected, shareInteraction } = useAgentSocket({
+  const { sessions, trusted, connected, shareInteraction, answerApproval } = useAgentSocket({
     onEvent: handleEvent,
     // Why same-origin on the phone too: the phone secret may only go back to the listener that served the page
     url: isViewerMode || isPhoneFull ? sameOriginWsUrl() : officeWsUrl(),
@@ -1862,6 +1873,14 @@ const App: React.FC = () => {
       <AgentCard agentId={inspectedId} agent={agents.find(a => a.id === inspectedId)} sessions={sessions} onClose={() => setInspectedId(null)} />
       <div className="chat-column">
       {!isSimMode && <PermissionCards cards={permissionCards} dispatch={dispatchPermissions} readOnly={readOnly} />}
+      {<BizApprovalCards
+        cards={bizApprovals}
+        readOnly={readOnly}
+        onAnswer={(agentId, decision) => {
+          answerApproval(agentId, decision)
+          dispatchBizApprovals({ type: 'biz_approval_sent', agentId, decision })
+        }}
+      />}
       <Meters onNotice={text => addMsg('system', 'default', '#8b8d91', text, true)} />
       <SlackChat
         messages={messages}

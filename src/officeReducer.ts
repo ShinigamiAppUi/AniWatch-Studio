@@ -1105,6 +1105,16 @@ function reduceEvent(state: OfficeState, action: OfficeAction, env: OfficeEnv): 
     }
 
     // ── Agent started working / status update ──────────────────────────────
+    // A business agent raising its hand: the character gets the same status
+    // bubble it would for an update; the card is drawn by src/bizApproval.ts
+    case 'agent_waiting':
+      return reduceOffice(state, {
+        ...action,
+        type: 'agent_working',
+        status: `✋ ${action.message ?? ''}`.trim(),
+        failed: false,
+      } as OfficeAction, env)
+
     case 'agent_working': {
       const id = action.agentId ?? action.agent?.id
       const statusMsg = action.status ?? workMessage()
