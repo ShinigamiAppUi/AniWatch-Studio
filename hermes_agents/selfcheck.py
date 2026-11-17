@@ -73,6 +73,11 @@ def main() -> int:
         'RECOMMENDATION_DB': '',
         'SEO_SITE_URL': '',
         'CDN_BASE_URL': '',
+        # W11d: no admin API until the stub below is up, and a small batch so the
+        # limit the office sends is visible in the request body
+        'ANIWATCH_API_URL': '',
+        'ANIWATCH_ADMIN_TOKEN': '',
+        'SCRAPER_BACKFILL_BATCH': '3',
     })
     (tmp / 'glossary.json').write_text(
         '{"Selamat datang di episode baru":"Welcome to the new episode",'
@@ -298,13 +303,14 @@ def main() -> int:
     sched1 = start_scheduler()
     sched2 = start_scheduler()
     ids = sorted(job.id for job in sched1.get_jobs())
-    check('w6: the scheduler registers all 12 jobs SCHEDULER.md lists',
+    check('w6: the scheduler registers all 15 jobs SCHEDULER.md lists',
           ids == ['approval_sweep', 'cache_warmer', 'campaign_retry', 'db_backup', 'email_check',
                   'episode_embargo', 'handoff_check', 'ops_check', 'recommendation_batch',
-                  'shared_context_cleanup', 'sla_check', 'weekly_report'], str(ids))
-    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 12)
+                  'resolver_refresh', 'scraper_backfill', 'shared_context_cleanup', 'sla_check',
+                  'source_health', 'weekly_report'], str(ids))
+    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 15)
     check('w4: /health can list the running jobs',
-          len(registered_jobs()) == 12 and pending_jobs() == [])
+          len(registered_jobs()) == 15 and pending_jobs() == [])
     check('w6: no job is parked in PENDING_JOBS now that the growth agents exist',
           PENDING_JOBS == {})
     shutdown_scheduler()
@@ -1362,10 +1368,10 @@ def main() -> int:
           f'{reports_reply} {stats_reply}'[:200])
 
     check('w10: every command in API-REFERENCE §6 is registered, and none answers nothing',
-          len(w7commands.COMMANDS) == 23
+          len(w7commands.COMMANDS) == 26
           and {'/biz', '/leads', '/tickets', '/sla', '/topselling', '/incidents', '/unban',
                '/schedule', '/embargo', '/translations', '/approve-sub', '/reports',
-               '/report-stats'} <= set(w7commands.COMMANDS)
+               '/report-stats', '/scrape', '/resolver', '/sources'} <= set(w7commands.COMMANDS)
           and all(w7commands.handle_command(name, now=now).get('handled') is True
                   for name in w7commands.COMMANDS))
 
@@ -1559,6 +1565,157 @@ def main() -> int:
               for name in ('new_lead', 'form_submit', 'deal_stage_change'))
           and {'Sales', 'Marketing'} <= set(orch.build_orchestrator_graph().node_names),
           str(sorted(orch.build_orchestrator_graph().node_names)))
+
+    # 15. W11d: Scraper + Resolver read AniWatch's admin API over HTTP -------
+    from http.server import BaseHTTPRequestHandler as _Handler, ThreadingHTTPServer
+
+    from hermes_agents import resolver as w11resolver
+    from hermes_agents import scraper as w11scraper
+
+    blind_health = w11scraper.sources_health()
+    blind_sources = w7commands.handle_command('/sources', now=now)
+    blind_scrape = w7commands.handle_command('/scrape', now=now)
+    check('w11: without ANIWATCH_API_URL the roles say so instead of reporting healthy',
+          blind_health['ok'] is False and 'belum diisi' in blind_health.get('reason', '')
+          and blind_health['sources'] == []
+          and blind_sources.get('ok') is False and blind_scrape.get('ok') is False
+          and 'isi ANIWATCH_API_URL' in blind_sources.get('reply', ''), str(blind_sources)[:200])
+
+    admin_calls: list[dict] = []
+
+    class _AdminHandler(_Handler):
+        def _body(self):
+            length = int(self.headers.get('Content-Length') or 0)
+            return json.loads(self.rfile.read(length) or b'{}') if length else {}
+
+        def _json(self, payload):
+            body = json.dumps(payload).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):  # noqa: N802 - http.server's name
+            admin_calls.append({'method': 'GET', 'path': self.path})
+            if self.path.startswith('/v1/admin/sources/health'):
+                self._json({'sources': [
+                    {'source_id': 'anime-a', 'name': 'AnimeA', 'content_type': 'anime',
+                     'status': 'active', 'consecutive_fail': 0},
+                    {'source_id': 'anime-b', 'name': 'AnimeB', 'content_type': 'anime',
+                     'status': 'degraded', 'consecutive_fail': 3, 'last_error': '503'},
+                    {'source_id': 'manga-c', 'name': 'MangaC', 'content_type': 'manga',
+                     'status': 'dead', 'consecutive_fail': 5, 'last_error': 'timeout'},
+                    {'source_id': 'novel-d', 'name': 'NovelD', 'content_type': 'novel',
+                     'status': 'unverified', 'consecutive_fail': 0},
+                ]})
+                return
+            if self.path.startswith('/v1/admin/scrape/queue'):
+                self._json({
+                    'states': {'queued': 4, 'claimed': 1, 'done': 9, 'gave_up': 1},
+                    'by_domain': {'anime': 4},
+                    'gave_up': [{'target_id': 'ep-9', 'last_error': 'adapter tidak ada'}],
+                    'items': [
+                        {'target_id': 'ep-9', 'source_id': 'anime-b', 'state': 'gave_up',
+                         'last_error': 'adapter tidak ada'},
+                        {'target_id': 'ep-10', 'source_id': 'anime-a', 'state': 'queued'},
+                    ],
+                })
+                return
+            self._json({'error': 'not found'})
+
+        def do_POST(self):  # noqa: N802 - http.server's name
+            body = self._body()
+            admin_calls.append({'method': 'POST', 'path': self.path, 'body': body})
+            if self.path.startswith('/v1/admin/scrape/backfill'):
+                self._json({'queued': int(body.get('limit') or 0)})
+                return
+            if self.path.startswith('/v1/admin/media/resolve'):
+                if 'unsupported' in str(body.get('url') or ''):
+                    self._json({'playable': False, 'warnings': ['host_not_supported: unsupported.tv']})
+                else:
+                    self._json({'provider': 'pixeldrain', 'playable': True,
+                                'content_type': 'video/mp4',
+                                'probe': {'status': 206, 'content_type': 'video/mp4', 'bytes': 2}})
+                return
+            self._json({'error': 'not found'})
+
+        def log_message(self, *args):  # noqa: D102 - keep the selfcheck output clean
+            return
+
+    admin_server = ThreadingHTTPServer(('127.0.0.1', 0), _AdminHandler)
+    threading.Thread(target=admin_server.serve_forever, daemon=True).start()
+    os.environ['ANIWATCH_API_URL'] = f'http://127.0.0.1:{admin_server.server_address[1]}'
+    os.environ['ANIWATCH_ADMIN_TOKEN'] = 'tok-selfcheck'
+
+    sources_reply = w7commands.handle_command('/sources', now=now)
+    check('w11: /sources counts active/degraded/dead per content type from the endpoint',
+          sources_reply.get('ok') is True and sources_reply['total'] == 4
+          and sources_reply['by_type']['anime'] == {'active': 1, 'degraded': 1}
+          and sources_reply['by_type']['manga'] == {'dead': 1}
+          and sources_reply['failed'] == 2
+          and len(sources_reply.get('reply', '').splitlines()) <= w7commands.MAX_LINES,
+          str(sources_reply)[:240])
+
+    scrape_reply = w7commands.handle_command('/scrape', now=now)
+    filtered = w7commands.handle_command('/scrape ep-10', now=now)
+    check('w11: /scrape reports the queue, the gave-up row and filters per item',
+          scrape_reply.get('ok') is True and scrape_reply['states'].get('queued') == 4
+          and scrape_reply['gave_up'] == 1 and 'ep-9' in scrape_reply.get('reply', '')
+          and [row['target_id'] for row in filtered['items']] == ['ep-10'],
+          f'{scrape_reply} {filtered}'[:240])
+
+    batch = w11scraper.backfill()
+    sent_limits = [call['body'].get('limit') for call in admin_calls
+                   if call.get('body') and call['path'].startswith('/v1/admin/scrape/backfill')]
+    check('w11: backfill sends SCRAPER_BACKFILL_BATCH and reports what was queued',
+          batch['ok'] is True and batch['queued'] == 3 and sent_limits == [3],
+          f'{batch} {sent_limits}')
+
+    ctx.set('handoff:scraper:resolver:sc-w11', {
+        'from': 'Scraper', 'to': 'Resolver', 'reason': 'need_direct',
+        'subject': 'episode:sc-w11',
+        'payload': {'content_type': 'anime', 'target_id': 'sc-w11', 'source_id': 'anime-a',
+                    'page_url': 'https://contoh.tv/ep/11'},
+        'expects': 'direct_ready', 'deadline': now + 3600, 'created_at': now}, 'Scraper')
+    ctx.set('handoff:scraper:resolver:sc-w11b', {
+        'from': 'Scraper', 'to': 'Resolver', 'reason': 'need_direct',
+        'subject': 'episode:sc-w11b',
+        'payload': {'content_type': 'anime', 'target_id': 'sc-w11b', 'source_id': 'anime-a',
+                    'page_url': 'https://unsupported.tv/ep/12'},
+        'expects': 'direct_ready', 'deadline': now + 3600, 'created_at': now}, 'Scraper')
+    refreshed = w11resolver.refresh_due(limit=5, context=ctx, now=now)
+    check('w11: Resolver reports direct_ready with probe, and a host without an adapter',
+          refreshed['ok'] is True
+          and [row['target_id'] for row in refreshed['resolved']] == ['sc-w11']
+          and refreshed['resolved'][0]['probe'] == {'status': 206, 'content_type': 'video/mp4', 'bytes': 2}
+          and refreshed['resolved'][0]['expires_at'] == now + w11resolver.CACHE_SECONDS
+          and refreshed['unresolved'] == {'unsupported.tv': 1},
+          str(refreshed)[:240])
+
+    resolver_reply = w7commands.handle_command('/resolver', now=now)
+    check('w11: /resolver names dead sources, unsupported hosts and gave-up rows',
+          resolver_reply.get('ok') is True and resolver_reply['dead'] == 1
+          and resolver_reply['degraded'] == 1 and resolver_reply['gave_up'] == 1
+          and resolver_reply['unresolved'] == {'unsupported.tv': 1}
+          and 'Host tanpa adapter' in resolver_reply.get('reply', '')
+          and len(resolver_reply.get('reply', '').splitlines()) <= w7commands.MAX_LINES,
+          str(resolver_reply)[:240])
+
+    proposal = w11scraper.propose_domain('anime-b', 'https://baru.example',
+                                        old_url='https://lama.example',
+                                        evidence=['301 ke https://baru.example'], char=None)
+    patches = [call for call in admin_calls if call['method'] != 'GET'
+               and 'baseurl' in call['path']]
+    check('w11: propose_domain asks a person and never writes base_url itself',
+          proposal['written'] is False and proposal['ok'] is False
+          and proposal['decision'] == 'timeout' and patches == [],
+          f'{proposal} {patches}')
+
+    admin_server.shutdown()
+    admin_server.server_close()
+    os.environ['ANIWATCH_API_URL'] = ''
+    os.environ['ANIWATCH_ADMIN_TOKEN'] = ''
 
     support.close()
 

@@ -3,7 +3,7 @@
 Nov 16, 2026 · @Shin · Sumber tunggal untuk config, tools, trigger, dan output agent.
 Ruangan & id desk: [ROOMS.md](ROOMS.md). Handoff: [AGENT-HANDOFFS.md](AGENT-HANDOFFS.md).
 
-**Total 45 agent** = 30 bisnis (5 generic + 25 AniWatch) + 15 specialist dev (12 base + 3 baru).
+**Total 46 agent** = 31 bisnis (5 generic + 26 AniWatch) + 15 specialist dev (12 base + 3 baru).
 
 Bentuk dokumen ini dua lapis:
 
@@ -42,6 +42,7 @@ export const ANIWATCH_AGENT_CONFIGS = {
   EpisodeScheduler: { color: '#60a5fa', emoji: '📅', desk: 'biz-s7', room: 'server-room' },
   Notifier:         { color: '#facc15', emoji: '🔔', desk: 'biz-s8', room: 'server-room' },
   CacheWarmer:      { color: '#a78bfa', emoji: '⚡', desk: 'biz-s9', room: 'server-room' },
+  Resolver:         { color: '#22d3ee', emoji: '🔗', desk: 'biz-s10', room: 'server-room' },
 
   // Community — main office
   Moderator:        { color: '#f43f5e', emoji: '🛡️', desk: 'biz-m2', room: 'main-office' },
@@ -301,7 +302,7 @@ tiket masuk → triage (kategori + prioritas) → kb.search(subject, top_k=3)
 
 ---
 
-### 4.2 Core Ops — Server Room (9)
+### 4.2 Core Ops — Server Room (10)
 
 Pipeline episode bersifat sequential dan dijaga Orchestrator:
 
@@ -318,6 +319,24 @@ Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityCh
 **Output:** episode tersimpan di DB (belum live)
 **Handoff:** → Metadata (`episode_fetched`: episode_id, source)
 **Catatan:** `check_duplicate` wajib sebelum `save_episode` — episode ganda merusak antrian embargo.
+**Implementasi W11d:** `hermes_agents/scraper.py` memicu backend lewat `POST /v1/admin/scrape/backfill`
+(`backfill`), `POST /v1/admin/scrape/run` (`run_target`, `dry_run` untuk uji parser) dan membaca
+`GET /v1/admin/sources/health` + `GET /v1/admin/scrape/queue`. Role ini **tidak** mengikis situs dari
+laptop. `propose_domain()` hanya mengirim kartu approval berisi bukti; ia tidak pernah memanggil
+PATCH `baseurl` (W11-SCRAPER-RESOLVER.md §8).
+
+#### 🔗 Resolver
+
+**Key:** `Resolver` · **Tools:** `resolve_page`, `probe_media`, `report_host`
+**Trigger:** job `resolver_refresh` tiap 6 jam, `/resolver`, dan `need_direct` yang menua
+**Output:** `direct_ready` (provider, `probe {status, content_type, bytes}`, `expires_at`) — URL putar
+**tidak** disimpan (D-64)
+**Handoff:** ← Scraper (`need_direct`) · → Scraper (`direct_ready`)
+**Implementasi W11d:** `hermes_agents/resolver.py` membaca `need_direct` dari SharedContext lalu
+memanggil `POST /v1/admin/media/resolve` (dry run, tidak menulis DB di kedua sisi). Host yang tidak
+punya adapter dilaporkan sebagai `host_not_supported` dan dihitung di `unresolved`, bukan disembunyikan.
+**Batas:** `PageResolver` dan `LinkResolver` hidup di backend Go (`internal/pageresolve`, `internal/media`);
+role ini bukan lapis ketiga, bukan host `direct`, dan tidak mengganti domain situs
 
 #### 📋 Metadata
 

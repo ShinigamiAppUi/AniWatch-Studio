@@ -488,7 +488,7 @@ export const GENERIC_BIZ_CONFIGS = {
   Support:      { color: '#10b981', emoji: '🎧', desk: 'biz-m1', room: 'main-office' },
 } as const satisfies Record<string, BusinessAgentConfig>
 
-/** AniWatch's own roles, 25 of them (docs/hermes-office/AGENTS.md §4.2–§4.6) */
+/** AniWatch's own roles, 26 of them (docs/hermes-office/AGENTS.md §4.2–§4.6) */
 export const ANIWATCH_AGENT_CONFIGS = {
   // Core Ops — server room, 24/7
   Scraper:          { color: '#64748b', emoji: '🕷️', desk: 'biz-s1', room: 'server-room' },
@@ -500,6 +500,7 @@ export const ANIWATCH_AGENT_CONFIGS = {
   EpisodeScheduler: { color: '#60a5fa', emoji: '📅', desk: 'biz-s7', room: 'server-room' },
   Notifier:         { color: '#facc15', emoji: '🔔', desk: 'biz-s8', room: 'server-room' },
   CacheWarmer:      { color: '#a78bfa', emoji: '⚡', desk: 'biz-s9', room: 'server-room' },
+  Resolver:         { color: '#22d3ee', emoji: '🔗', desk: 'biz-s10', room: 'server-room' },
 
   // Community — main office, beside the dev desks
   Moderator:        { color: '#f43f5e', emoji: '🛡️', desk: 'biz-m2', room: 'main-office' },
@@ -526,7 +527,7 @@ export const ANIWATCH_AGENT_CONFIGS = {
   SecOps:           { color: '#94a3b8', emoji: '🔐', desk: 'biz-f4', room: 'finance-legal' },
 } as const satisfies Record<string, BusinessAgentConfig>
 
-/** All 30 business roles, the key set every `agent_start` role must match */
+/** All 31 business roles, the key set every `agent_start` role must match */
 export const BUSINESS_AGENT_CONFIGS = {
   ...GENERIC_BIZ_CONFIGS,
   ...ANIWATCH_AGENT_CONFIGS,

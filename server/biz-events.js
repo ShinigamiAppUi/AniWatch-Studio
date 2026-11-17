@@ -160,11 +160,14 @@ export const BIZ_SLASH_COMMANDS = [
   '/approve-sub',
   '/reports',
   '/report-stats',
+  '/scrape',
+  '/resolver',
+  '/sources',
 ]
 
 /** One command line, so `/designfoo` stays an ordinary chat message */
 const BIZ_COMMAND_RE =
-  /^\/(design|pending-items|approve|revenue|payments|subscriptions|refunds|chargeback|security|takedown|biz|leads|tickets|sla|topselling|incidents|unban|schedule|embargo|translations|approve-sub|reports|report-stats)(?:\s|$)/
+  /^\/(design|pending-items|approve|revenue|payments|subscriptions|refunds|chargeback|security|takedown|biz|leads|tickets|sla|topselling|incidents|unban|schedule|embargo|translations|approve-sub|reports|report-stats|scrape|resolver|sources)(?:\s|$)/
 
 /** A chat line is short; the sidecar clamps again on its own side */
 const MAX_COMMAND_CHARS = 200

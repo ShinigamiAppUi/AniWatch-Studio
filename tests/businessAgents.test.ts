@@ -39,7 +39,7 @@ describe('a business role is seated at its own desk', () => {
       expect(seen.has(cfg.desk), `duplicate desk ${cfg.desk}`).toBe(false)
       seen.add(cfg.desk)
     }
-    expect(seen.size).toBe(30)
+    expect(seen.size).toBe(31)
   })
 
   it('Scraper appears in the server room at biz-s1, not in the office', () => {

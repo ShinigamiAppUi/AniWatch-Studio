@@ -1,5 +1,46 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 4.5 — 17 Nov 2026 (W11d: Scraper tersambung, role Resolver)
+
+### Ditambah
+
+- `hermes_agents/aniwatch_admin.py`: satu pintu ke admin API AniWatch (`ANIWATCH_API_URL` +
+  `ANIWATCH_ADMIN_TOKEN`, ENV-VARS §3f). Tanpa keduanya setiap panggilan mengembalikan `ok: false` +
+  alasan, bukan daftar kosong yang terbaca sebagai "semua sehat".
+- `hermes_agents/scraper.py`: `backfill()`, `run_target()`, `queue_summary()`, `sources_health()`,
+  `propose_domain()`. Role ini tidak mengikis situs sendiri; `propose_domain()` mengirim kartu
+  approval berisi bukti dan **tidak** memanggil PATCH `baseurl` (W11 §8).
+- `hermes_agents/resolver.py`: `resolve()` (dry run `POST /v1/admin/media/resolve`), `refresh_due()`
+  (membaca `need_direct` dari SharedContext, mengembalikan `direct_ready` + `expires_at`, menghitung
+  host `host_not_supported`), dan `health_report()`. Tidak ada URL putar yang disimpan (D-64).
+- Role `Resolver` (`🔗`, `biz-s10`, server room) di `src/types.ts`, plus spot + waypoint `biz-s10` di
+  `src/rooms.ts`. Role bisnis 30 → 31, total agent 45 → 46.
+- Tiga job scheduler: `source_health` (30 menit), `scraper_backfill` (tiap jam), `resolver_refresh`
+  (6 jam). Total job 12 → 15.
+- Tiga slash command: `/scrape [source|episode]`, `/resolver`, `/sources` (23 → 26), di
+  `webhook_server/commands.py` dan `server/biz-events.js`.
+- Selfcheck: **224 PASS / 0 FAIL** (7 cek W11d: tanpa variabel → `ok: false`, `/sources` per content
+  type, `/scrape` + filter per item, `backfill` mengirim `SCRAPER_BACKFILL_BATCH`, `direct_ready` +
+  host tanpa adapter, `/resolver`, dan `propose_domain` yang tidak menulis apa pun).
+
+### Diubah
+
+- `tests/businessAgents.test.ts` (31 meja unik), `tests/rooms.test.ts` (sepuluh meja Core Ops),
+  `tests/biz-commands.test.ts` (26 command).
+- AGENTS §4.2 (10 role Core Ops + kartu Resolver), ROOMS §5.2/§6, SCHEDULER §2 (15 job),
+  API-REFERENCE §6, ENV-VARS §3f + `.env.example`.
+
+### Batas
+
+- W11a–W11c belum ada: factory, `adapters_gen.go`, runner, `PageResolver`, antrean `000020`, dan
+  endpoint §4.7 masih di repo AniWatch. Selama itu ketiga command menjawab alasan yang jelas, bukan
+  angka; `refresh_due()` baru punya pekerjaan setelah `GET /v1/admin/scrape/queue` dan
+  `POST /v1/admin/media/resolve` hidup.
+- Health job kantor **tidak** menulis `is_active` maupun `base_url`: keduanya milik backend (§3 satu
+  field satu penulis).
+
+---
+
 ## Rev 4.4 — 17 Nov 2026 (surat yang menyerah terlihat di chat)
 
 ### Ditambah

@@ -130,8 +130,8 @@ describe('the new rooms\' layouts are sound', () => {
   it('a side room has room for what it is for: 8 meeting seats, 6 racks plus the core-ops desks, a coffee and a water place and 8 lunch seats', () => {
     const kinds = (id: RoomId) => ROOMS[id].agentSpots.map(s => s.type)
     expect(kinds('meeting-room')).toEqual(Array(8).fill('meeting-seat'))
-    // The server room keeps its six MCP racks and gained the nine Core Ops desks
-    expect(kinds('server-room')).toEqual([...Array(6).fill('standing'), ...Array(9).fill('desk')])
+    // The server room keeps its six MCP racks and gained the ten Core Ops desks
+    expect(kinds('server-room')).toEqual([...Array(6).fill('standing'), ...Array(10).fill('desk')])
     expect(kinds('lunch-room').sort()).toEqual(['coffee', ...Array(8).fill('lounge'), 'water'])
   })
 

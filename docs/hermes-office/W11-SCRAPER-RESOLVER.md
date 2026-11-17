@@ -1,6 +1,8 @@
 # Hermes Office — W11: Dua role `Scraper` & `Resolver`
 
-Nov 17, 2026 · @Shin · **Status: spesifikasi, belum ada kode.**
+Nov 17, 2026 · @Shin · **Status: W11d sudah ada di kode** — role `Resolver` (`biz-s10`),
+`hermes_agents/scraper.py`, `resolver.py`, tiga job, tiga command. W11a–W11c (backend Go) masih
+spesifikasi; kantor melapor `ok: false` + alasan selama endpoint §4.7 belum ada.
 Audit dasar: repo `ShinigamiAppUi/AniWatch` commit `b47e9f3` (dibaca 17 Nov 2026).
 Katalog agent: [AGENTS.md](AGENTS.md) · Handoff: [AGENT-HANDOFFS.md](AGENT-HANDOFFS.md) ·
 Scheduler: [SCHEDULER.md](SCHEDULER.md) · Roadmap sebelumnya: [PLAN.md](PLAN.md) (W1–W10 selesai).

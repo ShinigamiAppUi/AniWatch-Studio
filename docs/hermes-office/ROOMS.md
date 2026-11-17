@@ -15,7 +15,7 @@ menambah 4 ruangan dengan **memakai ulang pixel art yang sama** — tidak ada ar
 | 1 | Main Office | `main-office` | 1 | `main-office.png` | `biz-m1..m3` | dev desks base (10) + Community |
 | 2 | Corridor | `corridor` | 1 | `corridor.png` | — | hub navigasi, pintu depan, lift |
 | 3 | Meeting Room | `meeting-room` | 1 | `meeting-room.png` | — (ad-hoc) | approval, handoff, rapat |
-| 4 | Server Room | `server-room` | 1 | `server-room.png` | `biz-s1..s9` | MCP base (6) + Core Ops (9) |
+| 4 | Server Room | `server-room` | 1 | `server-room.png` | `biz-s1..s10` | MCP base (6) + Core Ops (10) |
 | 5 | Lunch Room | `lunch-room` | 1 | `lunch-room.png` | — | istirahat, agent idle lama |
 | 6 | Business Suite | `business-suite` | 2 | **`meeting-room.png`** | `biz-b1..b6` | Orchestrator, Sales, Marketing, Ops |
 | 7 | Creative Studio | `creative-studio` | 2 | **`main-office.png`** | `biz-c1..c10` | Growth + Premium pipeline |
@@ -130,7 +130,7 @@ Deretan meja paling kanan-belakang, di luar 10 `spot-*` dev (dan tidak pernah di
 | `biz-m2` | Moderator | 79.0 | 60.0 | down | 60 |
 | `biz-m3` | UserReportAgent | 83.0 | 57.0 | down | 58 |
 
-### 5.2 Server Room — `biz-s1..s9`
+### 5.2 Server Room — `biz-s1..s10`
 
 Sisi kanan lantai (berlian), di luar 6 `srv-*` MCP; dijangkau dari junction `W-srv-biz` yang
 tersambung ke `W-srv-in` (dekat pintu).
@@ -146,6 +146,7 @@ tersambung ke `W-srv-in` (dekat pintu).
 | `biz-s7` | EpisodeScheduler | 62.0 | 74.0 |
 | `biz-s8` | Notifier | 66.5 | 77.0 |
 | `biz-s9` | CacheWarmer | 58.0 | 80.0 |
+| `biz-s10` | Resolver | 53.5 | 76.0 |
 
 Semua `facing: 'up'`, `spriteFacing: 'rear-left'`, `zIndex` 62–72.
 
@@ -203,11 +204,11 @@ didaftarkan di `BUSINESS_AGENT_CONFIGS` atau untuk sesi review.
 | Ruangan | Spot bisnis | Agent bisnis | Sisa |
 | --- | --- | --- | --- |
 | Main Office | 3 | 3 (Support, Moderator, UserReportAgent) | 0 |
-| Server Room | 9 | 9 Core Ops | 0 |
+| Server Room | 10 | 10 Core Ops | 0 |
 | Business Suite | 6 | 4 | 2 |
 | Creative Studio | 10 | 10 | 0 |
 | Finance & Legal | 4 | 4 | 0 |
-| **Total** | **32** | **30** | **2** |
+| **Total** | **33** | **31** | **2** |
 
 Kalau sisa spot habis dan ada agent baru: **jangan** menumpuk di satu meja. Aturan base tetap
 berlaku — agent tanpa spot menunggu di lobby (`AgentState: 'waiting'`), dan itu terlihat di kantor

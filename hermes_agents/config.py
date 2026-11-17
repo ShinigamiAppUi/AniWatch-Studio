@@ -70,3 +70,22 @@ def seo_site_url() -> str:
 def security_event_feed() -> str:
     """Access-event JSONL for SecOps (W9); empty means the request rules cannot run."""
     return (os.environ.get('SECURITY_EVENT_FEED') or '').strip()
+
+
+def aniwatch_api_url() -> str:
+    """AniWatch's admin origin (W11); empty means the roles cannot report anything."""
+    return (os.environ.get('ANIWATCH_API_URL') or '').strip().rstrip('/')
+
+
+def aniwatch_admin_token() -> str:
+    """Admin bearer token for the endpoints in W11-SCRAPER-RESOLVER.md §4.7."""
+    return (os.environ.get('ANIWATCH_ADMIN_TOKEN') or '').strip()
+
+
+def scraper_backfill_batch() -> int:
+    """Items per hourly backfill (1-500); the ceiling keeps one hour from hammering a site."""
+    try:
+        value = int(os.environ.get('SCRAPER_BACKFILL_BATCH') or 50)
+    except ValueError:
+        return 50
+    return min(500, max(1, value))

@@ -37,6 +37,9 @@ Express secara langsung — kantor hanya menerima event lewat bridge.
 | `approval_sweep` | tiap jam | `sweep_approvals` (TTL 24 jam) | tidak | 30 dtk |
 | `handoff_check` | tiap 15 menit | `check_handoffs` — handoff lewat deadline | **ya** (eskalasi) | 60 dtk |
 | `campaign_retry` | tiap 15 menit | `retry_welcome_campaigns` — surat selamat datang yang gagal terkirim | tidak | 60 dtk |
+| `source_health` | tiap 30 menit | `run_source_health` → `GET /v1/admin/sources/health` (Scraper) | tidak | 120 dtk |
+| `scraper_backfill` | tiap jam | `run_scraper_backfill` → `POST /v1/admin/scrape/backfill` (Scraper) | tidak | 300 dtk |
+| `resolver_refresh` | tiap 6 jam | `run_resolver_refresh` → `POST /v1/admin/media/resolve` (Resolver) | tidak | 600 dtk |
 | `db_backup` | tiap hari 02.00 | `backup_databases` (DB-SCHEMA.md §13) | tidak | 300 dtk |
 
 Catatan per job:
@@ -93,6 +96,12 @@ Yang W10 tambahkan hanya datanya: Support mengirim gauge `tickets_pending`, `tic
 `sla_avg_response_min` dan `sla_breach_count` setiap kali tiket berubah, sehingga panel **biz** dan
 `/biz` menampilkan angka yang bergerak — `/biz` membacanya lewat `GET /biz-metrics`, dan kantor yang
 mati dijawab sebagai kantor yang mati.
+
+W11d menambah tiga job terakhir di tabel: `source_health` (30 menit), `scraper_backfill` (tiap jam) dan
+`resolver_refresh` (6 jam), kerjanya di `webhook_server/jobs.py`. Ketiganya internal (tidak lewat
+Orchestrator), idempoten, dan tidak melempar: tanpa `ANIWATCH_API_URL` + `ANIWATCH_ADMIN_TOKEN` hasilnya
+`ok: false` + alasan yang jelas, dan karakter Scraper/Resolver melaporkan hal itu — bukan "semua sehat".
+Totalnya **lima belas** job.
 
 `PENDING_JOBS` tetap ada dan **kosong** sekarang. Itu memang gunanya: job yang kerjanya belum ada
 ditulis di sana beserta alasannya, `start_scheduler()` menulis satu baris per entri saat start, dan

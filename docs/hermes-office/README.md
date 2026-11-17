@@ -167,7 +167,7 @@ teknis topik itu tinggal — jangan duplikasi ke file lain.
 | [BLUEPRINT.md](BLUEPRINT.md) | 🔴 | Spec teknis penuh Rev 3 + semua fix Rev 3.1 | daftar fix, batas modul |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 🔴 | Diagram sistem, data flow, tech stack | topologi & port |
 | [ROOMS.md](ROOMS.md) | 🔴 | 9 ruangan, pintu, desk slot map | id ruangan & id desk |
-| [AGENTS.md](AGENTS.md) | 🔴 | Katalog 45 agent: config, kartu, alur kerja | config tiap agent |
+| [AGENTS.md](AGENTS.md) | 🔴 | Katalog 46 agent: config, kartu, alur kerja | config tiap agent |
 | [PLAN.md](PLAN.md) | 🔴 | Roadmap 10 minggu (Fase 1–4) | urutan kerja |
 | [DB-SCHEMA.md](DB-SCHEMA.md) | 🔴 | Semua tabel SQLite terpusat | nama tabel & kolom |
 | [ENV-VARS.md](ENV-VARS.md) | 🔴 | Semua env var: tipe, default, wajib/opsional | nama env |

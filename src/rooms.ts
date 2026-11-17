@@ -475,6 +475,7 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'biz-s7', type: 'desk', x: 62.0, y: 74.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 70 },
       { id: 'biz-s8', type: 'desk', x: 66.5, y: 77.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 71 },
       { id: 'biz-s9', type: 'desk', x: 58.0, y: 80.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 72 },
+      { id: 'biz-s10', type: 'desk', x: 53.5, y: 76.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 72 },
     ],
     entryPoint: { x: 68.5, y: 53 },
     walkableArea: [{ x: 43.8, y: 38.8 }, { x: 93.0, y: 65.6 }, { x: 54.5, y: 94.0 }, { x: 6.0, y: 64.6 }],
@@ -493,7 +494,7 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'W-srv-6', x: 25.6, y: 64.4, connections: ['W-srv-aisle-4'] },
 
       // Core Ops: their own row of desks, reached from the door side of the room
-      { id: 'W-srv-biz', x: 64.0, y: 64.0, connections: ['W-srv-in', 'W-biz-s1', 'W-biz-s2', 'W-biz-s3', 'W-biz-s4', 'W-biz-s5', 'W-biz-s6', 'W-biz-s7', 'W-biz-s8', 'W-biz-s9'] },
+      { id: 'W-srv-biz', x: 64.0, y: 64.0, connections: ['W-srv-in', 'W-biz-s1', 'W-biz-s2', 'W-biz-s3', 'W-biz-s4', 'W-biz-s5', 'W-biz-s6', 'W-biz-s7', 'W-biz-s8', 'W-biz-s9', 'W-biz-s10'] },
       { id: 'W-biz-s1', x: 68.0, y: 60.0, connections: ['W-srv-biz'] },
       { id: 'W-biz-s2', x: 72.5, y: 63.0, connections: ['W-srv-biz'] },
       { id: 'W-biz-s3', x: 77.0, y: 66.0, connections: ['W-srv-biz'] },
@@ -503,6 +504,7 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'W-biz-s7', x: 62.0, y: 74.0, connections: ['W-srv-biz'] },
       { id: 'W-biz-s8', x: 66.5, y: 77.0, connections: ['W-srv-biz'] },
       { id: 'W-biz-s9', x: 58.0, y: 80.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s10', x: 53.5, y: 76.0, connections: ['W-srv-biz'] },
     ],
   },
 

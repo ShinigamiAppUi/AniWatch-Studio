@@ -12,7 +12,9 @@ Follows SCHEDULER.md §1 and §3:
 - one job raising never kills the scheduler (`_guard`).
 
 The 11 jobs SCHEDULER.md §2 listed since W6 had their work in `jobs.py`; W8 adds
-a twelfth, `campaign_retry`, for welcome letters whose first send failed.
+a twelfth, `campaign_retry`, for welcome letters whose first send failed, and
+W11d adds three more (`source_health`, `scraper_backfill`, `resolver_refresh`)
+that drive AniWatch's admin API.
 `PENDING_JOBS` stays as the place to name a job whose work is not built yet - a
 job that runs and does nothing would look like a working system - and it is
 empty while they all are.
@@ -96,6 +98,13 @@ def start_scheduler() -> BackgroundScheduler:
                       id='cache_warmer', **COMMON)
         sched.add_job(_guard(jobs.run_recommendation_batch), 'cron', day_of_week='sun', hour=22,
                       id='recommendation_batch', **COMMON)
+        # W11d: the two roles behind AniWatch's scraper and its media resolver
+        sched.add_job(_guard(jobs.run_source_health), IntervalTrigger(minutes=30),
+                      id='source_health', **COMMON)
+        sched.add_job(_guard(jobs.run_scraper_backfill), IntervalTrigger(hours=1),
+                      id='scraper_backfill', **COMMON)
+        sched.add_job(_guard(jobs.run_resolver_refresh), IntervalTrigger(hours=6),
+                      id='resolver_refresh', **COMMON)
         sched.start()
         _sched = sched
 

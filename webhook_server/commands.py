@@ -33,6 +33,16 @@ W10 adds the rest of API-REFERENCE.md §6, split by where the answer comes from:
     /reports                today's user reports
     /report-stats           the last 7 days, per day and per category
 
+W11d adds the three commands that read AniWatch's admin API (W11-SCRAPER-RESOLVER.md §5.5):
+
+    /scrape [source|episode] the backfill queue and the newest failures
+    /resolver               dead sources, hosts without an adapter, gave-up rows
+    /sources                active/dead/unverified per content type
+
+All three answer `AniWatch belum dikonfigurasi` when `ANIWATCH_API_URL` or
+`ANIWATCH_ADMIN_TOKEN` is missing: a report built from an unreachable backend
+would be the one invented number in the office.
+
 One of those is deliberately an answer about missing data, not a fake number:
 `/topselling` says `payment_events` has no `item_id`, so there is no per-item
 ranking to print. A chat line that claimed otherwise would be the only part of
@@ -78,7 +88,7 @@ COMMANDS = ('/design', '/pending-items', '/approve', '/revenue', '/payments',
             '/subscriptions', '/refunds', '/chargeback', '/security', '/takedown',
             '/biz', '/leads', '/tickets', '/sla', '/topselling', '/incidents',
             '/unban', '/schedule', '/embargo', '/translations', '/approve-sub',
-            '/reports', '/report-stats')
+            '/reports', '/report-stats', '/scrape', '/resolver', '/sources')
 
 #: Chat panel, not a dashboard: the office's own rule for business replies
 MAX_LINES = 6
@@ -740,6 +750,125 @@ def _report_stats(now: float | None) -> dict:
             'reply': _reply(*lines)}
 
 
+def _backend_reason(result: dict) -> str:
+    """The line a W11d command shows when AniWatch's admin API gave no numbers."""
+    reason = str(result.get('reason') or 'AniWatch belum menjawab')
+    if result.get('configured') is False:
+        return f'{reason} - isi ANIWATCH_API_URL + ANIWATCH_ADMIN_TOKEN'
+    return reason
+
+
+def _scrape(args: list[str], now: float | None) -> dict:
+    """`/scrape [source|episode]`: the backfill queue and the newest failures.
+
+    The queue lives in AniWatch (`GET /v1/admin/scrape/queue`); this command never
+    triggers a scrape, because a chat line that starts a hundred requests is not a
+    report. A filter narrows the per-item rows when the backend sends any; when it
+    only sends aggregates, the reply says that instead of pretending to filter.
+    """
+    from hermes_agents import scraper
+
+    wanted = ' '.join(args).strip().lower()
+    queue = scraper.queue_summary()
+    if not queue['ok']:
+        return {'handled': True, 'ok': False, 'reason': queue['reason'],
+                'reply': _reply('🕷️ /scrape membaca admin API AniWatch, dan tidak ada jawaban.',
+                                f'alasan: {_backend_reason(queue)[:160]}',
+                                'Jalankan backend AniWatch, lalu coba lagi.')}
+
+    states = queue['states']
+    total = sum(int(value or 0) for value in states.values())
+    filled = ', '.join(f'{name} {int(value or 0)}' for name, value in sorted(states.items()))
+    lines = [f'🕷️ Antrean: {total} — {filled or "kosong"}']
+
+    items = [row for row in queue['items'] if isinstance(row, dict)]
+    if wanted:
+        matched = [row for row in items if wanted in str(row).lower()]
+        lines.append(f'🔎 {len(matched)} baris cocok "{wanted}"' if items
+                     else f'🔎 filter "{wanted}": backend hanya mengirim agregat, bukan per item')
+        items = matched
+
+    gave_up = [row for row in queue['gave_up'] if isinstance(row, dict)]
+    if gave_up:
+        first = gave_up[0]
+        lines.append(f'⛔ give up: {len(gave_up)} — '
+                     f'{first.get("target_id") or first.get("id") or "?"} '
+                     f'({str(first.get("last_error") or "-")[:60]})')
+    else:
+        lines.append('⛔ give up: tidak ada')
+    for row in items[:2]:
+        lines.append(f'- {row.get("target_id") or row.get("id")} '
+                     f'{row.get("source_id") or row.get("domain") or "-"} '
+                     f'[{row.get("state") or "?"}] {str(row.get("last_error") or "")[:60]}')
+    return {'handled': True, 'ok': True, 'states': states, 'gave_up': len(gave_up),
+            'items': items[:10], 'reply': _reply(*lines)}
+
+
+def _resolver(now: float | None) -> dict:
+    """`/resolver`: dead/degraded sources, hosts without an adapter, gave-up rows.
+
+    Reading it also refreshes at most three `need_direct` pages, which is what
+    makes `unresolved` a measurement instead of a guess; the resolve is a dry run
+    that writes nothing on either side.
+    """
+    from hermes_agents import resolver
+
+    report = resolver.health_report()
+    if not report['ok']:
+        return {'handled': True, 'ok': False, 'reason': report.get('reason'),
+                'reply': _reply('🔗 /resolver butuh angka dari admin API AniWatch.',
+                                f'alasan: {_backend_reason(report)[:160]}',
+                                'Tanpa backend, laporan host tidak bisa dibuat.')}
+
+    unresolved = ', '.join(f'{host} {count}' for host, count in sorted(report['unresolved'].items()))
+    dead_names = ', '.join(str(row.get('name') or row.get('source_id') or '?')
+                           for row in report['dead'][:3])
+    lines = [
+        f'🔗 Sumber mati: {len(report["dead"])}, degraded: {len(report["degraded"])}',
+        f'🧩 Host tanpa adapter: {unresolved or "tidak ada"}',
+        f'🚫 give up di antrean: {len(report["gave_up"])}',
+        f'⏳ need_direct menunggu: {report["waiting"]}, siap putar: {len(report["resolved"])}',
+    ]
+    if dead_names:
+        lines.append(f'☠️ mati: {dead_names}')
+    return {'handled': True, 'ok': True, 'dead': len(report['dead']),
+            'degraded': len(report['degraded']), 'unresolved': report['unresolved'],
+            'gave_up': len(report['gave_up']), 'waiting': report['waiting'],
+            'resolved': len(report['resolved']), 'reply': _reply(*lines)}
+
+
+def _sources(now: float | None) -> dict:
+    """`/sources`: active/dead/unverified per content type, from the endpoint."""
+    from hermes_agents import scraper
+
+    health = scraper.sources_health()
+    if not health['ok']:
+        return {'handled': True, 'ok': False, 'reason': health.get('reason'),
+                'reply': _reply('📚 /sources membaca GET /v1/admin/sources/health.',
+                                f'alasan: {_backend_reason(health)[:160]}',
+                                'Angka sumber tidak ditebak dari ingatan.')}
+
+    by_type: dict[str, dict[str, int]] = {}
+    for row in health['sources']:
+        if not isinstance(row, dict):
+            continue
+        kind = str(row.get('content_type') or 'anime')
+        status = str(row.get('status') or 'unverified')
+        bucket = by_type.setdefault(kind, {})
+        bucket[status] = bucket.get(status, 0) + 1
+
+    total = sum(sum(bucket.values()) for bucket in by_type.values())
+    lines = [f'📚 {total} sumber di registry:']
+    for kind in sorted(by_type):
+        counts = ', '.join(f'{name} {n}' for name, n in sorted(by_type[kind].items()))
+        lines.append(f'- {kind}: {counts}')
+    failed = len(health['failed'])
+    lines.append(f'⚠️ {failed} sumber gagal >= {health["threshold"]}x berurutan'
+                 if failed else '✅ Tidak ada sumber yang gagal berulang')
+    return {'handled': True, 'ok': True, 'by_type': by_type, 'total': total,
+            'failed': failed, 'reply': _reply(*lines)}
+
+
 def handle_command(text: object, now: float | None = None) -> dict[str, Any]:
     """Answer one chat line, or say `handled: False` so it stays a chat message.
 
@@ -804,6 +933,13 @@ def handle_command(text: object, now: float | None = None) -> dict[str, Any]:
             return _approve_sub(args, at)
         if command == '/reports':
             return _reports(at)
+        # W11d: the three commands that read AniWatch's admin API
+        if command == '/scrape':
+            return _scrape(args, at)
+        if command == '/resolver':
+            return _resolver(at)
+        if command == '/sources':
+            return _sources(at)
         return _report_stats(at)
     except Exception as err:  # noqa: BLE001 - the chat must get an answer, not a 500
         log.exception('command %s gagal: %s', command, err)

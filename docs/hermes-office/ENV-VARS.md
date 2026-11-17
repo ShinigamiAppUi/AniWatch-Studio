@@ -180,6 +180,21 @@ kartu di kantor (`refund_request` di `POST /webhook/payment` atau `/refunds`), t
 `/takedown`. Purge CDN **tidak** diimplementasikan — `CDN_API_KEY` tetap tidak dipakai untuk purge,
 dan hasil DMCA menyatakan `cdn_purged: false` beserta alasannya.
 
+### 3f. AniWatch admin (W11d) — `hermes_agents/aniwatch_admin.py`
+
+Dua role W11d (`Scraper`, `Resolver`) tidak pernah menyentuh situs atau DB AniWatch sendiri: semuanya
+lewat admin API backend. Tanpa keduanya, `/scrape`, `/resolver`, dan `/sources` menjawab
+`belum dikonfigurasi` + alasan — bukan daftar kosong yang terbaca sebagai "semua sehat".
+
+| Variabel | Wajib | Default | Arti |
+| --- | --- | --- | --- |
+| `ANIWATCH_API_URL` | ya, untuk melapor | — (kosong) | origin admin, mis. `http://127.0.0.1:8080`; token dikirim sebagai `Authorization: Bearer` |
+| `ANIWATCH_ADMIN_TOKEN` | ya, untuk melapor | — (kosong) | token admin untuk endpoint `W11-SCRAPER-RESOLVER.md §4.7`; jangan ditulis di `.env.example` |
+| `SCRAPER_BACKFILL_BATCH` | tidak | `50` | item per jam untuk job `scraper_backfill` (dipangkas ke 1–500) |
+
+Sisi backend punya variabelnya sendiri dan bukan urusan kantor: `SCRAPER_MAX_ATTEMPTS` (5),
+`SCRAPER_LEASE_MINUTES` (10), `SCRAPE_MAX_SITES`, `MEDIA_DIRECT_HOSTS`.
+
 ---
 
 ## 4. `.env.example`
@@ -230,6 +245,11 @@ SUPPORT_FROM_NAME=AniWatch Support
 # ANALYTICS_FEED=~/.hermes-office/aniwatch-export.json
 # RECOMMENDATION_DB=~/.hermes-office/aniwatch.db
 # SEO_SITE_URL=https://aniwatch.example
+
+# ── AniWatch admin (W11d) ──────────────────────────────────────────────────
+# ANIWATCH_API_URL=http://127.0.0.1:8080
+# ANIWATCH_ADMIN_TOKEN=        # token admin; kosong = /scrape /resolver /sources bilang belum dikonfigurasi
+# SCRAPER_BACKFILL_BATCH=50
 
 LOG_LEVEL=INFO
 

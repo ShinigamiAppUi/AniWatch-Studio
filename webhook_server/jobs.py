@@ -273,6 +273,72 @@ def run_recommendation_batch(now: float | None = None) -> dict:
     return result
 
 
+def run_source_health(now: float | None = None) -> dict:
+    """Every 30 minutes: read AniWatch's source health and report the broken ones (W11d).
+
+    Internal job: it reads an endpoint, it does not run a trigger. A source the
+    backend already calls `dead`, or one at three failures in a row, is what the
+    Scraper reports (W11-SCRAPER-RESOLVER.md §5.4) - the backend flips
+    `is_active` itself, so nothing is written from here.
+    """
+    from hermes_agents.base import Agent
+    from hermes_agents import scraper
+
+    with Agent('Scraper', 'cek kesehatan sumber') as char:
+        char.update('sources_health', tool='sources_health')
+        result = scraper.sources_health()
+        if not result['ok']:
+            char.update(f'sumber tidak terbaca: {result["reason"]}'[:200])
+        else:
+            char.update(f'{len(result["sources"])} sumber, {len(result["dead"])} mati, '
+                        f'{len(result["failed"])} gagal berulang')
+    log.info('source_health: ok=%s mati=%d gagal=%d alasan=%s',
+             result['ok'], len(result['dead']), len(result['failed']), result.get('reason'))
+    return result
+
+
+def run_scraper_backfill(now: float | None = None) -> dict:
+    """Hourly: ask the backend to queue one batch of backfill work (W11d).
+
+    The batch size is `SCRAPER_BACKFILL_BATCH`, so the office cannot empty a
+    thousand sites in one hour; the backend's own per-host token bucket does the
+    rest.
+    """
+    from hermes_agents.base import Agent
+    from hermes_agents import scraper
+
+    with Agent('Scraper', 'isi antrean backfill') as char:
+        char.update('backfill', tool='backfill')
+        result = scraper.backfill()
+        char.update(f'{result.get("queued", 0)} masuk antrean (batas {result.get("limit")})'
+                    if result['ok'] else f'backfill gagal: {result["reason"]}'[:200])
+    log.info('scraper_backfill: ok=%s queued=%s alasan=%s',
+             result['ok'], result.get('queued'), result.get('reason'))
+    return result
+
+
+def run_resolver_refresh(now: float | None = None) -> dict:
+    """Every 6 hours: resolve the pages waiting for a playable URL (W11d).
+
+    Reads the `need_direct` handoffs addressed to the Resolver and reports a
+    `direct_ready` per page that probed playable. Nothing is stored: the URL
+    lasts minutes, so the resolve is repeated at playback time (D-64).
+    """
+    from hermes_agents.base import Agent
+    from hermes_agents import resolver
+
+    with Agent('Resolver', 'segarkan need_direct') as char:
+        char.update('refresh_due', tool='refresh_due')
+        result = resolver.refresh_due()
+        ready = len(result.get('resolved') or [])
+        unresolved = len(result.get('unresolved') or {})
+        char.update(f'{ready} siap putar, {unresolved} host tanpa adapter'
+                    if result['ok'] else f'resolve gagal: {result["reason"]}'[:200])
+    log.info('resolver_refresh: ok=%s siap=%d host_tanpa_adapter=%d',
+             result['ok'], len(result.get('resolved') or []), len(result.get('unresolved') or {}))
+    return result
+
+
 def backup_databases(dest: Path | None = None, now: float | None = None) -> list[Path]:
     """Copy the three business SQLite files into a dated folder.
 

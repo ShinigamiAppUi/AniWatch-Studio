@@ -47,6 +47,9 @@ describe('BIZ_SLASH_COMMANDS', () => {
       '/approve-sub',
       '/reports',
       '/report-stats',
+      '/scrape',
+      '/resolver',
+      '/sources',
     ])
   })
 

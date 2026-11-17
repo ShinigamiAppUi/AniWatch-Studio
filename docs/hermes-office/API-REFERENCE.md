@@ -567,10 +567,10 @@ Ditangani di `server/index.js` sebelum event diproses.
 
 ### Bisnis (baru)
 
-Didaftarkan di chat routing yang sama. Format: `<command> [arg]`. **Sudah hidup (W7–W10, 23
+Didaftarkan di chat routing yang sama. Format: `<command> [arg]`. **Sudah hidup (W7–W11d, 26
 command):** W7 — `/design`, `/pending-items`, `/approve`; W9 — `/revenue`, `/payments`,
-`/subscriptions`, `/refunds`, `/chargeback`, `/security`, `/takedown`; W10 — sisanya di tabel
-bawah. Base command di `server/index.js` menang lebih dulu, lalu baris yang cocok direlai
+`/subscriptions`, `/refunds`, `/chargeback`, `/security`, `/takedown`; W10 — sisanya di dua tabel
+bawah; W11d — `/scrape`, `/resolver`, `/sources`. Base command di `server/index.js` menang lebih dulu, lalu baris yang cocok direlai
 `bizSlashCommand()` ke sidecar `POST /command`. `BIZ_SLASH_COMMANDS` (`server/biz-events.js`) dan
 `COMMANDS` (`webhook_server/commands.py`) memuat daftar yang sama; `tests/biz-commands.test.ts` dan
 selfcheck W10 memeriksanya.
@@ -600,6 +600,15 @@ selfcheck W10 memeriksanya.
 | `/approve-sub <episode_id>` | `needs_review` → `approved`; tanpa id → daftar episode | `subtitle_tracks` |
 | `/reports` | laporan user hari ini per status dan kategori | `user_reports` |
 | `/report-stats` | tren 7 hari per hari + per kategori | `user_reports` |
+
+| Command W11d | Output | Sumber data |
+| --- | --- | --- |
+| `/scrape [source\|episode]` | antrean `queued/claimed/done/gave_up`, baris give-up terakhir, filter per item bila backend mengirimnya | `GET /v1/admin/scrape/queue` |
+| `/resolver` | sumber mati/degraded, host tanpa adapter, `gave_up`, `need_direct` tertunda; menyegarkan maksimal tiga halaman (dry run) | `GET /v1/admin/sources/health`, `GET /v1/admin/scrape/queue`, `POST /v1/admin/media/resolve` |
+| `/sources` | jumlah `active`/`degraded`/`dead`/`unverified` per content type + sumber gagal berulang | `GET /v1/admin/sources/health` |
+
+Ketiganya membaca `ANIWATCH_API_URL` + `ANIWATCH_ADMIN_TOKEN` (§ENV-VARS §3f). Tanpa keduanya
+jawabannya `belum dikonfigurasi` + alasan, bukan angka nol yang terlihat seperti sistem sehat.
 
 `/cancel-schedule [id]` dari rancangan lama **tidak** didaftarkan: pintunya `/takedown`, yang mencatat
 audit DMCA sebelum membatalkan. Dua command untuk satu efek hanya membuat audit punya dua bentuk.
