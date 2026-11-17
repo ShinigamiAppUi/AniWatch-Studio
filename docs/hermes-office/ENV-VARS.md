@@ -162,3 +162,49 @@ Bridge selalu dijalankan oleh sidecar (in-process) atau oleh skrip yang sudah `s
 - [ ] token tidak dikirim ke UI; jangan pernah `broadcast` payload event yang membawa header
 - [ ] `~/.agent-office/auth-token` mode `0600`, `~/.agent-office/` mode `0700`
 - [ ] `doctor` hijau: `npm run doctor` mengecek port, token, dan permission file
+
+---
+
+## 7. Tips & gotchas
+
+**`OFFICE_TOKEN` bukan token karangan.** Nilainya harus sama dengan isi
+`$AGENT_OFFICE_HOME/auth-token`. `openssl rand -hex 32` menghasilkan token yang **tidak** dikenal
+server → setiap `POST /event` dijawab 401, dan event menumpuk di DLQ tanpa satu pun karakter muncul.
+Satu-satunya perintah yang benar:
+
+```bash
+echo "OFFICE_TOKEN=$(cat "${AGENT_OFFICE_HOME:-$HOME/.agent-office}/auth-token")" >> .env
+```
+
+Setelah `npm run rotate-token`, token lama langsung mati — perbarui `.env` **dan** restart bridge,
+kalau tidak semua event masuk DLQ (dan itu terlihat seperti "kantor tidak menerima apa pun").
+
+**`SIDECAR_URL` dibaca dua bahasa.** `hermes_bridge/bridge.py` dan `server/biz-events.js` harus
+membaca nama yang sama. Ini fix Rev 3 #3; jangan pernah memperkenalkan `HERMES_SIDECAR_URL`.
+
+**Jangan bind `0.0.0.0`.** Sidecar: `--host 127.0.0.1`. Express sudah loopback dari base. Kalau
+butuh akses HP, pakai phone mode base (`npm run lan`), bukan membuka bind.
+
+**Ubah `.env` = restart.** Tidak ada hot-reload env di Python. Restart sidecar (dan bridge kalau
+dijalankan terpisah); scheduler membaca env saat start.
+
+**Opsional tapi dependen.** Variabel di bawah "opsional" hanya selama fiturnya tidak dipakai:
+
+| Fitur dipakai | Variabel yang jadi wajib | Kalau kosong |
+| --- | --- | --- |
+| `TRANSLATION_PROVIDER=deepl` | `DEEPL_API_KEY` | agent berhenti dengan `agent_error` jelas |
+| Publisher / Encoder | `CDN_API_KEY`, `CDN_BASE_URL` | upload gagal, item tidak pernah live |
+| Support lewat Gmail | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` | `check_new_emails` log sekali per jam, bukan tiap 5 menit |
+| Sales lewat HubSpot | `HUBSPOT_API_KEY` | `update_crm` jadi no-op + warning |
+| DesignAgent | `IMAGE_GEN_API_KEY` (+ `IMAGE_GEN_PROVIDER`) | berhenti di langkah pertama |
+| Notifier / SocialMedia | `DISCORD_WEBHOOK_URL`, `TELEGRAM_*`, `TWITTER_BEARER_TOKEN` | platform itu dilewati, yang lain tetap jalan |
+
+Aturan umum: integrasi opsional yang kosong **tidak** boleh menggagalkan agent lain, dan tidak boleh
+diam-diam (`except: pass`). Yang hilang hanya tool terkait, dan itu harus terlihat di bubble merah.
+
+**Jangan menaruh secret di tempat lain.** Bukan di `office.config.json`, bukan di kode, bukan di DB,
+bukan di argumen CLI (terlihat di `ps`), bukan di URL (masuk history). Hanya `.env` atau secret store
+OS.
+
+**Jangan log header.** `_log.warning("... %s", e)` boleh; mencetak `headers` atau URL dengan token
+tidak. `SECURITY.md` §11 punya perintah grep untuk memeriksanya sebelum rilis.

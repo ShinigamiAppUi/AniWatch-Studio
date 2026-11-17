@@ -76,7 +76,7 @@ sebelum embargo habis).
 
 - FastAPI sidecar `127.0.0.1:8765`
 - `SUPPORTED_TRIGGERS` + validasi secret; semua trigger lewat Orchestrator
-- APScheduler: 7 job inti (SCHEDULER.md), termasuk `cleanup_shared_context`
+- APScheduler: 11 job (SCHEDULER.md) — 7 inti, termasuk `cleanup_shared_context`; sisanya sweep approval, handoff check, publish embargo, dan backup
 
 **Deliverable:** trigger dari luar (curl) memunculkan Orchestrator lalu agent yang tepat.
 
@@ -161,16 +161,31 @@ manual kecuali approval.
 
 ---
 
-## Ringkasan dependensi antar minggu
+## Graf dependensi
 
 ```
-W1 ─▶ W2 ─┬─▶ W3 ─▶ W4 ─▶ W5 ─┐
-           └───────────────────┼─▶ W8 ─▶ W9 ─▶ W10
-                    W6 ─▶ W7 ──┘
+                    ┌──▶ W3 (pipeline episode) ──┐
+                    │                            │
+W1 ──▶ W2 ──────────┼──▶ W4 (webhook+scheduler) ──┼──▶ W8 ──▶ W9 ──▶ W10
+ (base)  (bridge)    │                            │   (orkestrasi) (uang)  (dashboard)
+                    ├──▶ W5 (support+community) ─┘
+                    │
+                    └──▶ W6 ──▶ W7
+                        (growth) (premium)
 ```
 
-W6/W7 bisa jalan paralel dengan W3–W5 oleh orang berbeda, **asal** W2 selesai (config + bridge).
-W8 wajib setelah W3 dan W5 karena menguji kedua rantai.
+| Aturan | Alasannya |
+| --- | --- |
+| W2 menunggu W1 | bridge butuh kantor yang benar-benar menerima event |
+| W3, W4, W5 boleh paralel setelah W2 | ketiganya hanya butuh config + bridge |
+| W6 boleh mulai setelah W2, tidak perlu W3 | growth memakai data AniWatch, bukan pipeline baru |
+| W7 (premium) setelah W6 | DesignAgent memakai tool image-gen yang sama dengan growth content |
+| W8 menunggu W3 **dan** W5 | menguji dua rantai handoff: pipeline dan sales→support |
+| W9 setelah W8 | chargeback butuh `run_orchestrator` yang sudah stabil |
+| W10 menunggu semuanya | panel metrics membaca semua angka yang dihasilkan W3–W9 |
+
+**Risiko jalur kritis:** W3 → W4 → W5 → W8 → W9 → W10. Kalau waktu mepet, W6 dan W7 yang dipotong
+dulu — keduanya tidak memblokir operasional harian.
 
 ---
 

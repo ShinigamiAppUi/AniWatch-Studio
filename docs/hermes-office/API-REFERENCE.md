@@ -226,6 +226,105 @@ handleBizWsMessage(ws, data)
 `approval_response` adalah **satu-satunya** pesan baru dari UI. Kalau sidecar mati, WS tetap
 menerima pesan dan hanya menulis warning — UI tidak boleh menggantung.
 
+### Payload dan efek visual
+
+Bentuk payload sudah final; yang berubah hanya isinya. Semua dikirim `bridge` lewat `POST /event`,
+lalu di-broadcast apa adanya ke UI.
+
+#### `agent_spawned` — karakter masuk dan duduk
+
+```json
+{
+  "type": "agent_spawned",
+  "agent": {
+    "id": "scraper-a1b2c3",
+    "name": "Scraper",
+    "role": "Scraper",
+    "task": "Ambil episode baru dari source"
+  }
+}
+```
+
+**Efek visual:** karakter muncul dari pintu depan koridor, berjalan ke meja milik `role`
+(ROOMS.md), lalu duduk. Kalau `role` tidak ada di `BUSINESS_AGENT_CONFIGS`, karakter **tidak muncul
+sama sekali** — tidak ada error di UI, jadi periksa ejaan role dulu.
+
+**Dipanggil oleh:** `bridge.agent_start()`.
+
+#### `agent_working` — speech bubble bergerak
+
+```json
+{
+  "type": "agent_working",
+  "agentId": "scraper-a1b2c3",
+  "status": "Mengambil halaman source...",
+  "tool": "fetch_source"
+}
+```
+
+**Efek visual:** bubble status berganti, karakter tetap bekerja. `failed: true` membuat bubble merah
+sekilas (tool gagal) tanpa mengeluarkan karakter.
+
+**Dipanggil oleh:** `bridge.agent_update()`, minimal sekali per tool call.
+
+#### `agent_completed` — jempol lalu keluar
+
+```json
+{
+  "type": "agent_completed",
+  "agentId": "scraper-a1b2c3",
+  "result": "3 episode baru tersimpan"
+}
+```
+
+**Efek visual:** karakter 👍, berjalan ke pintu, keluar lewat koridor. Kursinya langsung bebas.
+
+**Dipanggil oleh:** `bridge.agent_done()` — tepat sekali per `agent_start`.
+
+#### `agent_error` — geleng, tetap di meja kalau retry
+
+```json
+{
+  "type": "agent_error",
+  "agentId": "scraper-a1b2c3",
+  "error": "Source timeout setelah 3 percobaan",
+  "retrying": false
+}
+```
+
+**Efek visual:** bubble merah, karakter menggeleng. `retrying: true` → karakter **tetap** di meja;
+`false` → selesai seperti `agent_completed` tapi tanpa perayaan.
+
+**Dipanggil oleh:** `bridge.agent_error()`.
+
+#### `agent_waiting` — tangan naik ✋
+
+```json
+{
+  "type": "agent_waiting",
+  "agentId": "payment-9f8e7d",
+  "message": "Refund Rp 149.000 dari user 42, dibeli 3 hari lalu",
+  "options": ["Approve Refund", "Tolak", "Minta Info Lebih"]
+}
+```
+
+**Efek visual:** karakter mengangkat tangan, sesi jadi amber, card muncul dengan satu tombol per
+`options`. Menjawab card mengirim `approval_response` lewat WS.
+
+**Dipanggil oleh:** `bridge.agent_waiting()` — **sebelum** `wait_for_approval()`, tidak pernah
+sesudahnya.
+
+#### `biz_metric_update` — panel metrics bergerak
+
+```json
+{ "type": "biz_metric_update", "metrics": { "today": { "leads_qualified": 12 }, "sla": { "breach_count": 1 }, "agents_active": ["Support"], "last_updated": "2026-11-16T09:41:00.000Z" } }
+```
+
+**Efek visual:** angka di `BizMetricsPanel` berubah; baris SLA berkedip kalau `breach_count > 0`.
+Bukan animasi karakter.
+
+**Dipanggil oleh:** `POST /biz-metrics` (server yang membroadcast, bukan bridge).
+
 ---
 
 ## 4. FastAPI sidecar (8765)
@@ -277,20 +376,102 @@ Notifikasi Midtrans. Header `X-Signature-Key` harus sama dengan
 
 ## 5. Bridge — permukaan Python
 
+Tujuh fungsi publik. Agent **hanya** memakai ini; `bridge._post` privat (Rev 3.1 #3).
+
 ```python
 from hermes_bridge import bridge
 
-aid = bridge.agent_start("Scraper", "Scraper", "Cek episode baru")   # → agent id
+aid = bridge.agent_start("Scraper", "Scraper", "Cek episode baru")
 bridge.agent_update(aid, "Mengambil halaman source...", tool="fetch_source")
 bridge.agent_waiting(aid, "Episode corrupt, coba source lain?", ["Coba", "Batalkan"])
-decision = bridge.wait_for_approval(aid, timeout=300)                # → str
+decision = bridge.wait_for_approval(aid, timeout=300)
 bridge.agent_done(aid, "Episode tersimpan ✓")
 bridge.agent_error(aid, "Timeout source", retrying=False)
 bridge.update_biz_metrics({"tickets_resolved": 1})
 ```
 
-Aturan: `agent_waiting` **selalu** sebelum `wait_for_approval` (fix Rev 3 #1). Jangan panggil
-`bridge._post` dari agent — itu privat (Rev 3.1 #3).
+### `agent_start(name, role, task) -> str`
+
+Memunculkan karakter dan mengembalikan id yang dipakai semua panggilan berikutnya.
+
+| Arg | Arti |
+| --- | --- |
+| `name` | nama tampilan di bubble & inspector, bebas ("Scraper", "Quality Checker") |
+| `role` | **key persis** di `BUSINESS_AGENT_CONFIGS` — menentukan warna, emoji, ruangan, meja |
+| `task` | satu baris task untuk bubble awal |
+
+**Returns:** `"{role.lower()}-{uuid6}"`, mis. `scraper-a1b2c3`.
+
+```python
+aid = bridge.agent_start("Translation Agent", "TranslationAgent", "Terjemahkan sub ep 12")
+```
+
+### `agent_update(agent_id, status, tool=None) -> None`
+
+Update bubble. Panggil per tool call, bukan per baris log.
+
+```python
+bridge.agent_update(aid, "Menerjemahkan via DeepL...", tool="translate_text")
+```
+
+### `agent_waiting(agent_id, message, options) -> None`
+
+Menampilkan permission card ✋. **Wajib dipanggil sebelum** `wait_for_approval` — kalau dibalik,
+agent polling untuk card yang belum pernah muncul (fix Rev 3 #1).
+
+```python
+bridge.agent_waiting(aid, "QA 0.62 di bawah 0.75. Lanjutkan?",
+                     ["Approve & Lanjutkan", "Reject & Translate Ulang"])
+```
+
+### `wait_for_approval(agent_id, timeout=300) -> str`
+
+Polling `GET {SIDECAR}/approval/{agent_id}` tiap 3 detik.
+
+| Timeout | Dipakai untuk |
+| --- | --- |
+| 300 dtk (default) | keputusan biasa |
+| 120 dtk | SLA breach (mendesak) |
+| 3600 dtk | review terjemahan |
+| 86400 dtk | refund (keputusan uang) |
+
+**Returns:** isi `decision` persis seperti label tombol (mis. `"Approve Refund"`), atau `"timeout"`.
+Timeout **bukan** exception: agent yang memutuskan apa artinya (biasanya `agent_error` + antrian
+manusia).
+
+```python
+decision = bridge.wait_for_approval(aid, timeout=3600)
+if decision == "timeout":
+    bridge.agent_error(aid, "Tidak ada review dalam 1 jam", retrying=False)
+    return "rejected"
+```
+
+### `agent_done(agent_id, result="done") -> None`
+
+Karakter 👍 lalu keluar. Sekali per agent.
+
+```python
+bridge.agent_done(aid, "3 episode baru tersimpan ✓")
+```
+
+### `agent_error(agent_id, error, retrying=False) -> None`
+
+`retrying=True` → karakter tetap di meja; `False` → selesai tanpa perayaan.
+
+```python
+bridge.agent_error(aid, "Source timeout", retrying=True)
+```
+
+### `update_biz_metrics(delta) -> None`
+
+POST langsung ke `/biz-metrics` (bukan `/event`, fix Rev 3 #2). Counter dijumlahkan; key gauge
+(`tickets_pending`, `sla_avg_response_min`, `sla_breach_count`) **mengganti** nilai.
+
+```python
+bridge.update_biz_metrics({"tickets_resolved": 1})
+bridge.update_biz_metrics({"tickets_pending": 4})        # gauge — bukan +1
+```
+
 
 ---
 

@@ -62,6 +62,12 @@ ON CONFLICT(key, day) DO UPDATE SET
   updated_at = excluded.updated_at;
 ```
 
+**Writer:** `server/biz-events.js` (`POST /biz-metrics`) — dipanggil `bridge.update_biz_metrics()`
+untuk counter, agent untuk gauge. · **Reader:** `GET /biz-metrics` (panel + `/biz`), dan broadcast
+`biz_metric_update`.
+**Umur data:** satu baris per (key, hari). Tidak ada job reset — hari baru berarti baris baru,
+sehingga "hari ini" selalu benar tanpa menghapus apa pun.
+
 Key yang dipakai panel (`GET /biz-metrics` mengembalikan bentuk ini):
 
 | Key | Arti | Dikirim oleh |
@@ -105,6 +111,13 @@ CREATE TABLE IF NOT EXISTS tickets (
 CREATE INDEX IF NOT EXISTS idx_tickets_sla ON tickets (status, sla_deadline);
 ```
 
+**Writer:** `SupportAgent.triage_ticket()` (baris baru), `check_sla_breaches()` (extend deadline /
+resolve), `SupportAgent.resolve()`. · **Reader:** `check_sla_breaches`, `/tickets`, `/sla`, gauge
+`tickets_pending` / `sla_*`.
+
+Alur status: `open → pending → resolved | escalated`. `escalated` wajib punya `assignee`; tiket
+`resolved` wajib punya `resolved_at`.
+
 Query yang dipakai `check_sla_breaches`: `status IN ('open','pending') AND sla_deadline < now`.
 
 ---
@@ -127,6 +140,13 @@ CREATE TABLE IF NOT EXISTS user_reports (
 CREATE INDEX IF NOT EXISTS idx_reports_episode ON user_reports (episode_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_reports_status  ON user_reports (status, created_at);
 ```
+
+**Writer:** `UserReportAgent.log_report()` (baru), `forward_to_support()` (`forwarded`),
+QC pipeline (`investigating` → `resolved`). · **Reader:** `UserReportAgent` (cek duplikat), `/reports`,
+`/report-stats`.
+
+Alur status: `pending → investigating → resolved | forwarded | dismissed`. Laporan duplikat
+(episode sama dalam 24 jam) masuk `dismissed` dengan catatan, bukan baris baru.
 
 `/report-stats` = `GROUP BY episode_id ORDER BY COUNT(*) DESC` atas 7 hari terakhir.
 
@@ -151,6 +171,13 @@ CREATE TABLE IF NOT EXISTS episode_schedule (
 
 CREATE INDEX IF NOT EXISTS idx_schedule_embargo ON episode_schedule (embargo_until, status);
 ```
+
+**Writer:** `EpisodeScheduler.schedule_episode()` (baru), `cancel_schedule()`, `publish_due_episodes()`,
+dan `DMCA` (`cancelled`). · **Reader:** job `episode_embargo` tiap menit, `/schedule`, `/embargo`.
+
+Alur status: `scheduled → live` (embargo lewat) · `scheduled → cancelled` (DMCA/manual) ·
+`scheduled → failed` (error publish). `live` tidak pernah kembali ke `scheduled`; koreksi setelah live
+= unpublish + purge, bukan reschedule.
 
 Dua transisi yang **harus** atomik (dipakai `cancel_schedule` vs `_publish_episode`):
 
@@ -185,6 +212,10 @@ CREATE TABLE IF NOT EXISTS subtitle_tracks (
 );
 ```
 
+**Writer:** `TranslationAgent.save_translated_sub()` (`ready`/`needs_review`), approval
+(`approved`/`rejected`), `Subtitle` (baris `source`). · **Reader:** `/translations`,
+`/approve-sub [episode_id]`, QualityChecker (semua track harus `ready`/`approved`).
+
 `status='needs_review'` adalah satu-satunya alasan `/translations` menampilkan baris yang butuh
 `/approve-sub [episode_id]`.
 
@@ -218,6 +249,10 @@ CREATE TABLE IF NOT EXISTS subscription_status (
 );
 ```
 
+**Writer:** `PaymentAgent.handle_payment_webhook()` + semua handler; `subscription_status` ditulis
+oleh `_handle_success()` / `_handle_renewal_failed()`. · **Reader:** `PaymentAgent`, `/payments`,
+`/subscriptions`, `/refunds`, `/revenue`.
+
 Idempotensi: `INSERT OR IGNORE` atas `payment_events.id` — Midtrans bisa mengirim notifikasi yang
 sama dua kali, dan refund ganda adalah bug uang, bukan bug UI.
 
@@ -246,6 +281,14 @@ CREATE TABLE IF NOT EXISTS premium_items (
 CREATE INDEX IF NOT EXISTS idx_items_status ON premium_items (status, created_at);
 ```
 
+**Writer:** `DesignAgent` (`draft`), `QAAgent` (`qa_passed`), `PricingAgent` (`priced`),
+`PreviewAgent` (`previewed`), approval (`approved`/`rejected`), `Publisher` (`live`).
+· **Reader:** `/pending-items`, `/approve [id]`, `/topselling`, tombol di permission card.
+
+Alur status: `draft → qa_passed → priced → previewed → pending_approval → approved | rejected → live`.
+Satu baris = satu item; revisi menulis status baru pada baris yang sama (bukan baris baru), sehingga
+`/approve` tidak pernah bingung dua item dengan id yang sama.
+
 `/pending-items` = `status='pending_approval'`; `/approve [id]` menulis `approved` lalu memicu
 Publisher. Approval dari permission card dan dari slash command menulis status yang sama.
 
@@ -265,6 +308,9 @@ CREATE TABLE IF NOT EXISTS kb_meta (
     created_at REAL
 );
 ```
+
+**Writer:** `SQLiteKB.upsert()` dan `kb/ingest.py`. · **Reader:** `SupportAgent.search_kb()`,
+`kb.search()` di agent lain.
 
 `schema.sql` dibaca lewat `Path(__file__).parent / "schema.sql"` — **path absolut relatif ke file**,
 bukan CWD (fix Rev 2).
@@ -291,6 +337,10 @@ CREATE TABLE IF NOT EXISTS dlq (
 CREATE INDEX IF NOT EXISTS idx_dlq_ts ON dlq (ts);
 ```
 
+**Writer:** `DeadLetterQueue.push()` — dipanggil `bridge._post` setelah retry habis, dan
+`update_biz_metrics` saat `/biz-metrics` tidak terjangkau. · **Reader/deleter:** `_flush()` tiap 30
+detik (maks 50 baris), atau manual lewat `sqlite3 dlq.db`.
+
 Aturan (fix Rev 3.1 #5):
 
 - Flusher memakai `_send_once`, **tidak** `_post` — jadi kegagalan tidak menambah baris baru.
@@ -312,6 +362,9 @@ CREATE TABLE IF NOT EXISTS context (
 
 CREATE INDEX IF NOT EXISTS idx_context_ts ON context (ts);
 ```
+
+**Writer:** agent mana pun lewat `ctx.set()` / `ctx.update()` / `handoff.hand_off()`.
+· **Reader:** agent penerima lewat `ctx.get()` / `ctx.find()` / `handoff.take()`; cleanup job 03.00.
 
 Key yang dipakai (konvensi, bukan constraint):
 
