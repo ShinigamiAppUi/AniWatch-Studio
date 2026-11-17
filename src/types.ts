@@ -446,5 +446,82 @@ export const AGENT_CONFIGS: Record<string, { color: string; emoji: string; title
   'gmail':                 { color: '#ea4335', emoji: '📧', title: 'Gmail' },
   'ios-simulator':         { color: '#a2aaad', emoji: '📱', title: 'iOS' },
   'assistant':             { color: '#cc785c', emoji: '🤖', title: 'Claude' },
-  'default':               { color: '#95a5a6', emoji: '👤', title: 'Worker' },
+    'default':              { color: '#95a5a6', emoji: '👤', title: 'Worker' },
+}
+
+/**
+ * The business team's roles, as the office draws them (docs/hermes-office/AGENTS.md).
+ *
+ * A business agent sends the same `agent_spawned` event a dev agent does; this
+ * table is the only difference between them. `role` must be the key exactly —
+ * a role missing here draws nothing at all, with no error anywhere.
+ *
+ * `desk` is a spot id in src/rooms.ts (docs/hermes-office/ROOMS.md holds the
+ * map), never a dev spot: the two teams share the building, not the desks.
+ */
+export interface BusinessAgentConfig {
+  color: string
+  emoji: string
+  desk: string
+  room: RoomId
+}
+
+/** Business roles that fit any company (docs/hermes-office/AGENTS.md §4.1) */
+export const GENERIC_BIZ_CONFIGS = {
+  Orchestrator: { color: '#8b5cf6', emoji: '🧠', desk: 'biz-b1', room: 'business-suite' },
+  Sales:        { color: '#f59e0b', emoji: '💼', desk: 'biz-b2', room: 'business-suite' },
+  Marketing:    { color: '#ec4899', emoji: '📣', desk: 'biz-b3', room: 'business-suite' },
+  Ops:          { color: '#6366f1', emoji: '⚙️', desk: 'biz-b4', room: 'business-suite' },
+  Support:      { color: '#10b981', emoji: '🎧', desk: 'biz-m1', room: 'main-office' },
+} as const satisfies Record<string, BusinessAgentConfig>
+
+/** AniWatch's own roles, 25 of them (docs/hermes-office/AGENTS.md §4.2–§4.6) */
+export const ANIWATCH_AGENT_CONFIGS = {
+  // Core Ops — server room, 24/7
+  Scraper:          { color: '#64748b', emoji: '🕷️', desk: 'biz-s1', room: 'server-room' },
+  Metadata:         { color: '#0ea5e9', emoji: '📋', desk: 'biz-s2', room: 'server-room' },
+  Encoder:          { color: '#f97316', emoji: '🔄', desk: 'biz-s3', room: 'server-room' },
+  Subtitle:         { color: '#38bdf8', emoji: '🌐', desk: 'biz-s4', room: 'server-room' },
+  TranslationAgent: { color: '#34d399', emoji: '🌏', desk: 'biz-s5', room: 'server-room' },
+  QualityChecker:   { color: '#84cc16', emoji: '🔍', desk: 'biz-s6', room: 'server-room' },
+  EpisodeScheduler: { color: '#60a5fa', emoji: '📅', desk: 'biz-s7', room: 'server-room' },
+  Notifier:         { color: '#facc15', emoji: '🔔', desk: 'biz-s8', room: 'server-room' },
+  CacheWarmer:      { color: '#a78bfa', emoji: '⚡', desk: 'biz-s9', room: 'server-room' },
+
+  // Community — main office, beside the dev desks
+  Moderator:        { color: '#f43f5e', emoji: '🛡️', desk: 'biz-m2', room: 'main-office' },
+  UserReportAgent:  { color: '#fb923c', emoji: '🚨', desk: 'biz-m3', room: 'main-office' },
+
+  // Growth — creative studio
+  Analytics:        { color: '#06b6d4', emoji: '📊', desk: 'biz-c1', room: 'creative-studio' },
+  SEO:              { color: '#4ade80', emoji: '🔎', desk: 'biz-c2', room: 'creative-studio' },
+  SocialMedia:      { color: '#fb7185', emoji: '📱', desk: 'biz-c3', room: 'creative-studio' },
+  Recommendation:   { color: '#c084fc', emoji: '🎯', desk: 'biz-c4', room: 'creative-studio' },
+  Retention:        { color: '#f472b6', emoji: '💌', desk: 'biz-c5', room: 'creative-studio' },
+
+  // Premium pipeline — creative studio
+  DesignAgent:      { color: '#e879f9', emoji: '🎨', desk: 'biz-c6', room: 'creative-studio' },
+  QAAgent:          { color: '#a3e635', emoji: '✅', desk: 'biz-c7', room: 'creative-studio' },
+  PricingAgent:     { color: '#fbbf24', emoji: '💰', desk: 'biz-c8', room: 'creative-studio' },
+  PreviewAgent:     { color: '#7dd3fc', emoji: '👁️', desk: 'biz-c9', room: 'creative-studio' },
+  Publisher:        { color: '#34d399', emoji: '🚀', desk: 'biz-c10', room: 'creative-studio' },
+
+  // Finance / Legal / Security — finance & legal
+  RevenueTracker:   { color: '#4ade80', emoji: '💵', desk: 'biz-f1', room: 'finance-legal' },
+  PaymentAgent:     { color: '#34d399', emoji: '💳', desk: 'biz-f2', room: 'finance-legal' },
+  DMCA:             { color: '#fca5a5', emoji: '⚖️', desk: 'biz-f3', room: 'finance-legal' },
+  SecOps:           { color: '#94a3b8', emoji: '🔐', desk: 'biz-f4', room: 'finance-legal' },
+} as const satisfies Record<string, BusinessAgentConfig>
+
+/** All 30 business roles, the key set every `agent_start` role must match */
+export const BUSINESS_AGENT_CONFIGS = {
+  ...GENERIC_BIZ_CONFIGS,
+  ...ANIWATCH_AGENT_CONFIGS,
+} as const
+
+export type BusinessRole = keyof typeof BUSINESS_AGENT_CONFIGS
+
+/** True when `role` is a business role (so the office seats it by this table, not as a dev agent) */
+export function isBusinessRole(role: string): role is BusinessRole {
+  return Object.prototype.hasOwnProperty.call(BUSINESS_AGENT_CONFIGS, role)
 }

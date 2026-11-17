@@ -115,37 +115,39 @@ apa adanya; spot baru cukup diletakkan di area lantai yang sudah terukur.
 
 ## 5. Desk slot map
 
-Semua koordinat adalah persen (0–100) dari gambar ruangan. Nilai di bawah adalah titik awal —
-wajib disetel dengan `/?helper&room=<id>` sebelum dianggap final (lihat `docs/reference.md`,
-bagian "Rooms").
+Semua koordinat adalah persen (0–100) dari gambar ruangan, dan **persis nilai di `src/rooms.ts`**
+(`agentSpots`). Semua sudah dicek berada di dalam `walkableArea` ruangannya oleh `tests/rooms.test.ts`;
+geser dengan `/?helper&room=<id>` kalau perlu, lalu perbarui tabel ini dan kode sekaligus.
 
 ### 5.1 Main Office — `biz-m1..m3`
 
-Deretan meja paling kanan-belakang, di luar 10 `spot-*` dev.
+Deretan meja paling kanan-belakang, di luar 10 `spot-*` dev (dan tidak pernah dipakai hire dev:
+`pickSpot` melewati semua `biz-*`).
 
 | Desk | Role | x | y | facing | zIndex |
 | --- | --- | --- | --- | --- | --- |
-| `biz-m1` | Support | 78.0 | 62.0 | down | 60 |
-| `biz-m2` | Moderator | 84.0 | 58.0 | down | 55 |
-| `biz-m3` | UserReportAgent | 90.0 | 54.0 | down | 50 |
+| `biz-m1` | Support | 74.5 | 63.5 | down | 62 |
+| `biz-m2` | Moderator | 79.0 | 60.0 | down | 60 |
+| `biz-m3` | UserReportAgent | 83.0 | 57.0 | down | 58 |
 
 ### 5.2 Server Room — `biz-s1..s9`
 
-Baris rak kedua (dinding kanan), di luar 6 `srv-*` MCP.
+Sisi kanan lantai (berlian), di luar 6 `srv-*` MCP; dijangkau dari junction `W-srv-biz` yang
+tersambung ke `W-srv-in` (dekat pintu).
 
 | Desk | Role | x | y |
-| --- | --- | --- | --- |
-| `biz-s1` | Scraper | 72.0 | 44.0 |
-| `biz-s2` | Metadata | 76.0 | 46.5 |
-| `biz-s3` | Encoder | 80.0 | 49.0 |
-| `biz-s4` | Subtitle | 84.0 | 51.5 |
-| `biz-s5` | TranslationAgent | 88.0 | 54.0 |
-| `biz-s6` | QualityChecker | 72.0 | 54.0 |
-| `biz-s7` | EpisodeScheduler | 76.0 | 56.5 |
-| `biz-s8` | Notifier | 80.0 | 59.0 |
-| `biz-s9` | CacheWarmer | 84.0 | 61.5 |
+| --- | --- | --- |
+| `biz-s1` | Scraper | 68.0 | 60.0 |
+| `biz-s2` | Metadata | 72.5 | 63.0 |
+| `biz-s3` | Encoder | 77.0 | 66.0 |
+| `biz-s4` | Subtitle | 66.0 | 68.0 |
+| `biz-s5` | TranslationAgent | 70.5 | 71.0 |
+| `biz-s6` | QualityChecker | 75.0 | 74.0 |
+| `biz-s7` | EpisodeScheduler | 62.0 | 74.0 |
+| `biz-s8` | Notifier | 66.5 | 77.0 |
+| `biz-s9` | CacheWarmer | 58.0 | 80.0 |
 
-Semua `facing: 'up'`, `spriteFacing: 'rear-left'`, `zIndex` 50–58 (menghadap rak).
+Semua `facing: 'up'`, `spriteFacing: 'rear-left'`, `zIndex` 62–72.
 
 ### 5.3 Business Suite — `biz-b1..b6`
 
@@ -190,8 +192,9 @@ Art `server-room.png`; empat meja berkas.
 
 ### 5.6 Exec Floor — `exec-1..exec-2`
 
-Art `meeting-room.png`. `exec-1` adalah kursi boss (karakter `boss`, bukan agent). `exec-2` untuk
-manusia/tamu saat review (`/approve` dari UI).
+Art `meeting-room.png`. Dua meja kerja: `exec-1` (33.3, 64.4, down) dan `exec-2` (38.6, 60.8, down).
+Karakter `boss` tetap memakai `spot-1` di Main Office; ruangan ini untuk exec/agent bisnis yang
+didaftarkan di `BUSINESS_AGENT_CONFIGS` atau untuk sesi review.
 
 ---
 

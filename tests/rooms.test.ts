@@ -17,16 +17,23 @@ import {
 } from '../src/roomRules'
 import { findWaypointPath } from '../src/agentManager'
 
-const SIDE_ROOMS: RoomId[] = ['meeting-room', 'server-room', 'lunch-room']
+const SIDE_ROOMS: RoomId[] = [
+  'meeting-room', 'server-room', 'lunch-room',
+  // Floor 2 (docs/hermes-office/ROOMS.md): same art, different desks
+  'business-suite', 'creative-studio', 'finance-legal', 'exec-floor',
+]
 const PUBLIC = fileURLToPath(new URL('../public', import.meta.url))
 
 // ---------------------------------------------------------------------------
 // The star
 // ---------------------------------------------------------------------------
 
-describe('the building: five places in a star', () => {
-  it('is the office, the corridor and three rooms, and nothing else', () => {
-    expect([...ROOM_IDS].sort()).toEqual(['corridor', 'lunch-room', 'main-office', 'meeting-room', 'server-room'])
+describe('the building: nine places in a star', () => {
+  it('is the office, the corridor, three side rooms and four upstairs, and nothing else', () => {
+    expect([...ROOM_IDS].sort()).toEqual([
+      'business-suite', 'corridor', 'creative-studio', 'exec-floor', 'finance-legal',
+      'lunch-room', 'main-office', 'meeting-room', 'server-room',
+    ])
     for (const id of ROOM_IDS) expect(ROOMS[id].id).toBe(id)
   })
 
@@ -36,7 +43,10 @@ describe('the building: five places in a star', () => {
       expect(doorTo(id, HUB_ROOM)).not.toBeNull()
       expect(doorTo(HUB_ROOM, id)).not.toBeNull()
     }
-    expect([...getConnectedRooms(HUB_ROOM)].sort()).toEqual(['lunch-room', 'main-office', 'meeting-room', 'server-room'])
+    expect([...getConnectedRooms(HUB_ROOM)].sort()).toEqual([
+      'business-suite', 'creative-studio', 'exec-floor', 'finance-legal',
+      'lunch-room', 'main-office', 'meeting-room', 'server-room',
+    ])
   })
 
   it('findRoomPath goes through the corridor between any two rooms, and one step to or from it', () => {
@@ -117,10 +127,11 @@ describe('the new rooms\' layouts are sound', () => {
     }
   })
 
-  it('a side room has room for what it is for: 8 meeting seats, 6 racks, a coffee and a water place and 8 lunch seats', () => {
+  it('a side room has room for what it is for: 8 meeting seats, 6 racks plus the core-ops desks, a coffee and a water place and 8 lunch seats', () => {
     const kinds = (id: RoomId) => ROOMS[id].agentSpots.map(s => s.type)
     expect(kinds('meeting-room')).toEqual(Array(8).fill('meeting-seat'))
-    expect(kinds('server-room')).toEqual(Array(6).fill('standing'))
+    // The server room keeps its six MCP racks and gained the nine Core Ops desks
+    expect(kinds('server-room')).toEqual([...Array(6).fill('standing'), ...Array(9).fill('desk')])
     expect(kinds('lunch-room').sort()).toEqual(['coffee', ...Array(8).fill('lounge'), 'water'])
   })
 
@@ -209,10 +220,14 @@ describe('a room is closed until its art is drawn (src/roomAccess.ts)', () => {
     expect([...openRoomSet([OFFICE_ROOM], true)].sort()).toEqual([...ROOM_IDS].sort())
   })
 
-  it("a room's art is named after it (day and night, plus a Dunder Mifflin pair when it has one); the office's live in the theme", () => {
+  it("a room's art is named after it, or after the room it borrows (day and night, plus a Dunder Mifflin pair when it has one); the office's live in the theme", () => {
     for (const id of [HUB_ROOM, ...SIDE_ROOMS]) {
       const dm = ROOMS[id].backgroundDm ? [`/rooms/${id}-day-dm.webp`, `/rooms/${id}-night-dm.webp`] : []
-      expect(roomArtFiles(id)).toEqual([`/rooms/${id}-day.webp`, `/rooms/${id}-night.webp`, ...dm])
+      // A floor-2 room borrows a drawn room's pictures instead of owning a pair
+      const expected = ROOMS[id].artReuse
+        ? [ROOMS[id].background.day, ROOMS[id].background.night, ...dm]
+        : [`/rooms/${id}-day.webp`, `/rooms/${id}-night.webp`, ...dm]
+      expect(roomArtFiles(id)).toEqual(expected)
     }
     expect(roomArtFiles(OFFICE_ROOM)).toEqual([])
   })

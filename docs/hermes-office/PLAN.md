@@ -53,7 +53,9 @@ python -m hermes_bridge.smoke --all      # 30 role muncul di meja yang benar, la
 python -m hermes_bridge.smoke --approval # card ✋ muncul; klik Allow; script lanjut
 ```
 
-Approval end-to-end: event `agent_waiting` → card → `approval_response` → sidecar → agent lanjut.
+W2 selesai tanpa card UI: `agent_waiting` menaikkan bubble ✋ dan `wait_for_approval` mem-poll
+sidecar; **card tombol + `approval_response` dari UI dikerjakan di W10**. Uji jalur mailbox-nya
+sekarang dengan `curl -X POST localhost:8765/approval-callback`.
 
 ---
 

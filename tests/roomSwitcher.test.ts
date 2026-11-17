@@ -34,12 +34,22 @@ describe('the floor plan model', () => {
   })
 
   it('lists the open rooms as their doors stand along the corridor, the corridor last', () => {
-    // Left to right as drawn: the meeting room by the lift, the office at the far end
-    expect(planOrder()).toEqual(['meeting-room', 'server-room', 'lunch-room', 'main-office'])
+    // Left to right as drawn: the meeting room by the lift, the floor-2 lift
+    // bank, then the office at the far end
+    expect(planOrder()).toEqual([
+      'meeting-room', 'business-suite', 'creative-studio', 'finance-legal', 'exec-floor',
+      'server-room', 'lunch-room', 'main-office',
+    ])
     const model = switcherModel([], { open: ALL, view: OFFICE_ROOM })
-    expect(model.map(r => r.id)).toEqual(['meeting-room', 'server-room', 'lunch-room', 'main-office', 'corridor'])
-    expect(model.map(r => r.place)).toEqual(['room', 'room', 'room', 'room', 'hub'])
-    expect(model.map(r => r.short)).toEqual(['Meeting', 'Server', 'Lunch', 'Office', 'Corridor'])
+    expect(model.map(r => r.id)).toEqual([
+      'meeting-room', 'business-suite', 'creative-studio', 'finance-legal', 'exec-floor',
+      'server-room', 'lunch-room', 'main-office', 'corridor',
+    ])
+    expect(model.map(r => r.place)).toEqual(['room', 'room', 'room', 'room', 'room', 'room', 'room', 'room', 'hub'])
+    expect(model.map(r => r.short)).toEqual([
+      'Meeting', 'Business Suite', 'Creative Studio', 'Finance & Legal', 'Exec Floor',
+      'Server', 'Lunch', 'Office', 'Corridor',
+    ])
   })
 
   it('leaves a closed room out', () => {
@@ -167,7 +177,11 @@ describe('the placement helper export', () => {
   })
 
   it('in the corridor each door says which room it opens onto; the front door and the manager door are landmarks', () => {
-    expect(doorTargets(HUB_ROOM)).toEqual(['main-office', 'meeting-room', 'server-room', 'lunch-room', 'front-door', 'decor-door'])
+    expect(doorTargets(HUB_ROOM)).toEqual([
+      'main-office', 'meeting-room', 'server-room', 'lunch-room',
+      'business-suite', 'creative-studio', 'finance-legal', 'exec-floor',
+      'front-door', 'decor-door',
+    ])
     const out = exportRoomLayout(HUB_ROOM, [
       door(22, 50, { doorTarget: 'main-office' }),
       door(70, 50, { doorTarget: 'server-room' }),
@@ -192,9 +206,13 @@ describe('the placement helper export', () => {
     expect(exportRoomLayout('meeting-room', spots)).toContain("id: 'meet-1'")
     expect(exportRoomLayout(OFFICE_ROOM, spots)).toContain("id: 'spot-1'")
     expect(new Set(Object.values(SPOT_PREFIX)).size).toBe(ROOM_IDS.length)
-    // The prefixes are the ones the provisional layouts already use
+    // The prefixes are the ones the provisional layouts already use; a business
+    // desk keeps its `biz-*` id wherever it stands (src/types.ts)
     for (const id of ['meeting-room', 'server-room'] as RoomId[]) {
-      for (const s of ROOMS[id].agentSpots) expect(s.id.startsWith(`${SPOT_PREFIX[id]}-`)).toBe(true)
+      for (const s of ROOMS[id].agentSpots) {
+        const ours = s.id.startsWith(`${SPOT_PREFIX[id]}-`) || s.id.startsWith('biz-')
+        expect(ours, `${id} ${s.id}`).toBe(true)
+      }
     }
   })
 

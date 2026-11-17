@@ -43,8 +43,8 @@
  * answered by the chat bot). Incident mode hears the same signals in App.tsx.
  */
 
-import { Agent, AgentScene, OfficeEvent, Position, SignalEvent, SnapshotAgent, ServerHealth, SessionInfo, SessionMain, MainState, NeedsYou, AGENT_CONFIGS } from './types'
-import { ROOMS, AgentSpot, HUB_ROOM, OFFICE_ROOM, getFreeSpot, type RoomId } from './rooms'
+import { Agent, AgentScene, OfficeEvent, Position, SignalEvent, SnapshotAgent, ServerHealth, SessionInfo, SessionMain, MainState, NeedsYou, AGENT_CONFIGS, BUSINESS_AGENT_CONFIGS, isBusinessRole } from './types'
+import { ROOMS, AgentSpot, HUB_ROOM, OFFICE_ROOM, getFreeSpot, findSpot, type RoomId } from './rooms'
 import {
   beginTransfer, stepTransfer, settleTransfer, planRoomMoves, heldSpotIds, roomOf, inOffice,
   FRONT_DOOR, standInside, type Transfer,
@@ -296,6 +296,12 @@ export interface StepResult extends OfficeResult {
 // ---------------------------------------------------------------------------
 
 function cfgFor(role: string) {
+  // A business role is drawn the same way a dev role is, from its own table
+  // (src/types.ts): colour and emoji per role, the role itself as the title.
+  if (isBusinessRole(role)) {
+    const biz = BUSINESS_AGENT_CONFIGS[role]
+    return { color: biz.color, emoji: biz.emoji, title: role }
+  }
   return AGENT_CONFIGS[role] ?? AGENT_CONFIGS['default']
 }
 
@@ -322,11 +328,26 @@ function occupiedSpotIds(agents: Agent[]): Set<string> {
   return heldSpotIds(agents)
 }
 
+/**
+ * The desk a business role owns, when it is free. The role's config names the
+ * spot (src/types.ts) and `findSpot` says which room that spot is in, so the
+ * agent starts in its own room instead of the office (docs/hermes-office/ROOMS.md).
+ */
+export function businessSpot(role: string, agents: Agent[]): { spot: AgentSpot; room: RoomId } | null {
+  if (!isBusinessRole(role)) return null
+  const found = findSpot(BUSINESS_AGENT_CONFIGS[role].desk)
+  if (!found) return null
+  return occupiedSpotIds(agents).has(found.spot.id) ? null : found
+}
+
 /** The filing cabinet for browsing roles when it is free, otherwise the first free desk */
+/** Desks a business role owns: a dev hire never takes one (src/types.ts, ROOMS.md) */
+const BUSINESS_DESK_IDS = new Set<string>(Object.values(BUSINESS_AGENT_CONFIGS).map(c => c.desk))
+
 export function pickSpot(agents: Agent[], role: string): AgentSpot | null {
   const taken = occupiedSpotIds(agents)
   if (FILING_ROLES.has(role) && FILING_SPOT !== null && !taken.has(FILING_SPOT.id)) return FILING_SPOT
-  return MAIN_ROOM.agentSpots.find(s => s.type === 'desk' && !taken.has(s.id)) ?? null
+  return MAIN_ROOM.agentSpots.find(s => s.type === 'desk' && !BUSINESS_DESK_IDS.has(s.id) && !taken.has(s.id)) ?? null
 }
 
 /**
@@ -539,11 +560,21 @@ function spawnAgent(state: OfficeState, raw: SpawnFields, env: OfficeEnv, announ
   const preferred = raw.preferredSpotId
     ? MAIN_ROOM.agentSpots.find(s => s.id === raw.preferredSpotId && !occupiedSpotIds(state.agents).has(s.id)) ?? null
     : null
-  const spot = preferred ?? pickSpot(state.agents, role)
+  // A business role sits at its own desk in its own room; a dev agent never
+  // has one, so it falls through to the office (pickSpot) unchanged.
+  const biz = preferred ? null : businessSpot(role, state.agents)
+  const spot = preferred ?? biz?.spot ?? pickSpot(state.agents, role)
   if (spot) {
     // hiredAt from the env clock, so the same event reduced twice gives the same agent
     const base = createAgent({ id, name, role, task, spot, hiredAt: env.now })
-    agent = { ...base, ...common, pathQueue: env.computePath(base.position, base.targetPosition) }
+    // createAgent starts everyone in the office; a floor-2 desk moves the home room
+    const home = biz ? biz.room : null
+    agent = {
+      ...base,
+      ...common,
+      ...(home ? { room: home, assignedRoom: home } : {}),
+      pathQueue: env.computePath(base.position, base.targetPosition),
+    }
     if (raw.statusText) agent = { ...agent, statusText: raw.statusText }
     if (announce) {
       effects.push({ kind: 'msg', sender: name, role, color: cfg.color, text: task ? (env.live ? `📋 ${task}` : `starting: ${task}`) : spawnMessage() })

@@ -104,10 +104,10 @@ Satu-satunya titik kontak Python → Express. Kontraknya:
 | --- | --- | --- |
 | `agent_start(name, role, task)` | `agent_spawned` → `POST /event` | agent mulai |
 | `agent_update(id, status, tool)` | `agent_working` | tiap tool call |
-| `agent_waiting(id, msg, options)` | `agent_waiting` | sebelum polling approval (lihat fix Rev 3.1 #8) |
+| `agent_waiting(id, msg, options)` | `agent_working` (status ✋) | sebelum polling approval (lihat fix Rev 3.1 #8) |
 | `wait_for_approval(id, timeout)` | `GET {SIDECAR}/approval/{id}` tiap 3 dtk | setelah card tampil |
 | `agent_done(id, result)` | `agent_completed` | task selesai |
-| `agent_error(id, err, retrying)` | `agent_error` | gagal / retry |
+| `agent_error(id, err, retrying)` | `agent_working` + `failed: true` | gagal / retry |
 | `update_biz_metrics(delta)` | `POST /biz-metrics` | tiap task selesai / tiap N menit |
 
 Aturan wajib:
@@ -161,8 +161,8 @@ Disisipkan ke `server/index.js`: satu baris `registerBizRoutes(...)` saat startu
 | `agent_spawned` | agent bisnis mulai | karakter muncul dari pintu, jalan ke meja |
 | `agent_working` | tiap tool call | speech bubble update |
 | `agent_completed` | selesai | jempol 👍, jalan ke pintu, keluar |
-| `agent_error` | error/retry | bubble merah, geleng |
-| `agent_waiting` | menunggu approval | tangan naik ✋ + permission card |
+| `agent_working` (`failed: true`) | error/retry | bubble merah ❌ |
+| `agent_working` (status `✋ …`) | menunggu approval | bubble ✋ (card = W10) |
 | `biz_metric_update` | tiap task / interval | meters bisnis update |
 
 Bentuk payload **sama** dengan event dev (`agent`, `agentId`, `status`, `tool`, `result`, `error`),

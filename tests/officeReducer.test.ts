@@ -1020,7 +1020,8 @@ describe("a Claude's status line survives its walks", () => {
   })
 
   it('a Claude seated from the lobby keeps its needs-you line', () => {
-    const desks = MAIN_ROOM.agentSpots.filter(s => s.type === 'desk').length
+    // Dev desks only: the business team's desks are never handed to a hire (src/officeReducer.ts)
+    const desks = MAIN_ROOM.agentSpots.filter(s => s.type === 'desk' && !s.id.startsWith('biz-')).length
     const ids = Array.from({ length: desks - 1 }, (_, i) => `w${i + 1}`)  // the boss has the other desk
     const full = settle(dispatchAll(liveOffice(), ids.map(id => spawn(id))).state).state
     const { state: waiting } = reduceOffice(full, { type: 'session_needs_you', ...S1, kind: 'permission', toolName: 'Bash', summary: 'npm test' }, env())

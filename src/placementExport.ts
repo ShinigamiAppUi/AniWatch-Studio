@@ -54,6 +54,11 @@ export const SPOT_PREFIX: Record<RoomId, string> = {
   'meeting-room': 'meet',
   'server-room': 'srv',
   'lunch-room': 'lunch',
+  // Floor 2: business desks keep the `biz-` prefix the business config uses
+  'business-suite': 'biz-b',
+  'creative-studio': 'biz-c',
+  'finance-legal': 'biz-f',
+  'exec-floor': 'exec',
 }
 
 const LANDMARK_LABEL: Record<RoomLandmark['kind'], string> = {

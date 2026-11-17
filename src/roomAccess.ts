@@ -28,7 +28,11 @@ import { ROOMS, ROOM_IDS, HUB_ROOM, OFFICE_ROOM, type RoomId } from './rooms'
  * scripts/check-assets.mjs. A room without its own Dunder Mifflin pair shows
  * its default pictures in that theme (roomArt).
  */
-export const DRAWN_ROOMS: readonly RoomId[] = [OFFICE_ROOM, 'corridor', 'meeting-room', 'server-room', 'lunch-room']
+export const DRAWN_ROOMS: readonly RoomId[] = [
+  OFFICE_ROOM, 'corridor', 'meeting-room', 'server-room', 'lunch-room',
+  // Floor 2 shows art already drawn: each of these points its background at one of the rooms above
+  'business-suite', 'creative-studio', 'finance-legal', 'exec-floor',
+]
 
 /**
  * Whether the page asked for the art-less preview of every room.

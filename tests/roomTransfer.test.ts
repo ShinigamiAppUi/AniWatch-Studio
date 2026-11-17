@@ -331,20 +331,23 @@ describe('with the corridor open the front door is the way in and out', () => {
   })
 
   it('someone waiting for a desk waits in the office lobby, and is seated once a desk is free', () => {
-    // Nine desks for hires: of the office's eleven one is the boss's and one is kept for a session's Claude
-    const ids = Array.from({ length: 10 }, (_, i) => `w${i + 1}`)
+    // Every office desk but the boss's and the one kept for a session's Claude;
+    // one hire more than that has no desk to sit at
+    const seats = ROOMS[OFFICE_ROOM].agentSpots.filter(s => s.type === 'desk' && !s.id.startsWith('biz-')).length - 1
+    const waitingId = `w${seats + 1}`
+    const ids = Array.from({ length: seats + 1 }, (_, i) => `w${i + 1}`)
     const hired = dispatchAll(liveOffice(), ids.map(id => spawn(id))).state
     // It too comes in by the front door, and is only queued for a desk once it is in the office
-    expect(agent(hired, 'w10')).toMatchObject({ state: 'waiting', room: 'corridor', position: FRONT_DOOR })
+    expect(agent(hired, waitingId)).toMatchObject({ state: 'waiting', room: 'corridor', position: FRONT_DOOR })
     const full = settle(hired).state
-    expect(agent(full, 'w10')).toMatchObject({ state: 'waiting', room: 'main-office' })
-    expect(agent(full, 'w10')!.assignedSpotId).toBeUndefined()
-    expect(full.meta.w10.transfer).toBeUndefined()
+    expect(agent(full, waitingId)).toMatchObject({ state: 'waiting', room: 'main-office' })
+    expect(agent(full, waitingId)!.assignedSpotId).toBeUndefined()
+    expect(full.meta[waitingId].transfer).toBeUndefined()
 
     const freed = reduceOffice(full, { type: 'agent_completed', agentId: 'w1' }, at(T0 + MIN_VISIBLE_TIME)).state
     const after = settle(freed, at(T0 + MIN_VISIBLE_TIME)).state
     expect(agent(after, 'w1')).toBeUndefined()
-    expect(agent(after, 'w10')).toMatchObject({ state: 'working', room: 'main-office', assignedSpotId: agent(full, 'w1')!.assignedSpotId })
+    expect(agent(after, waitingId)).toMatchObject({ state: 'working', room: 'main-office', assignedSpotId: agent(full, 'w1')!.assignedSpotId })
   })
 
   it('a leaver crosses the office to its door, then the corridor to the front door, and is gone there and not before', () => {

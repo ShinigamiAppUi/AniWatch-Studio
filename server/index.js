@@ -47,6 +47,7 @@ import {
   lanFullRouteAllowed, createLockout,
 } from './lan.js'
 import { loadOrCreateLanCert } from './lan-cert.js'
+import { registerBizRoutes, handleBizWsMessage } from './biz-events.js'
 import { createRecap, recapLine, isRecapDate, localDate } from './recap.js'
 import { createPromptQueue, parseMention, resolveMention, mentionName, MARKER_DIR_NAME, MAX_PROMPT_LEN, MAX_QUEUED_PER_SESSION } from './prompt-queue.js'
 
@@ -3871,6 +3872,19 @@ function sweepStale(now = Date.now()) {
 setInterval(() => sweepStale(), 5 * 60_000).unref()
 
 // ---------------------------------------------------------------------------
+// Business team — metrics (GET/POST /biz-metrics) and the approval relay
+// (server/biz-events.js). Registered before the static UI, like every route.
+// ---------------------------------------------------------------------------
+
+registerBizRoutes(app, db, broadcast, {
+  requireToken,
+  activeAgents: () => liveAgents()
+    .filter(a => a.state === 'working')
+    .map(a => a.role || a.name)
+    .filter(Boolean),
+})
+
+// ---------------------------------------------------------------------------
 // Static UI — registered after every API route so /health, /chat, ... win
 // ---------------------------------------------------------------------------
 
@@ -4068,6 +4082,8 @@ wss.on('connection', (ws, req) => {
   ws.send(JSON.stringify(buildSnapshot(trusted)))
 
   ws.on('message', data => onClientInteraction(ws, data, 'office'))
+  // A permission card's button: relayed to the sidecar, never acted on here
+  ws.on('message', data => { handleBizWsMessage(data, { trusted }) })
 
   ws.on('close', () => {
     console.log(`[ws] Client disconnected (remaining: ${wss.clients.size})`)

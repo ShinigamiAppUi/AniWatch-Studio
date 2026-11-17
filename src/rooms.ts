@@ -30,6 +30,11 @@ export type RoomId =
   | 'meeting-room'
   | 'server-room'
   | 'lunch-room'
+  // Floor 2 — the business team, on the same art as the rooms above (docs/hermes-office/ROOMS.md)
+  | 'business-suite'
+  | 'creative-studio'
+  | 'finance-legal'
+  | 'exec-floor'
 
 export interface Waypoint {
   id: string
@@ -93,6 +98,10 @@ export interface Room {
   id: RoomId
   name: string
   description: string
+  /** Which floor the floor plan puts it on: 1 (default) is the office's own floor */
+  floor?: 1 | 2
+  /** The room whose art this one borrows, so a floor-2 room needs no new artwork */
+  artReuse?: RoomId
   background: {
     day: string       // path to empty room background
     night: string
@@ -199,6 +208,11 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'spot-printer', type: 'printer', x: 81, y: 63, facing: 'down', spriteFacing: 'rear-left' },
       { id: 'spot-door-2', type: 'door', x: 64, y: 46.6, facing: 'down', spriteFacing: 'rear-right' },
       { id: 'spot-door-3', type: 'door', x: 69.9, y: 50.8, facing: 'down', spriteFacing: 'front-right' },
+
+      // Community: three desks of their own, right of the dev clusters
+      { id: 'biz-m1', type: 'desk', x: 74.5, y: 63.5, facing: 'down', spriteFacing: 'front-left', zIndex: 62 },
+      { id: 'biz-m2', type: 'desk', x: 79.0, y: 60.0, facing: 'down', spriteFacing: 'front-left', zIndex: 60 },
+      { id: 'biz-m3', type: 'desk', x: 83.0, y: 57.0, facing: 'down', spriteFacing: 'front-left', zIndex: 58 },
     ],
     entryPoint: { x: 67.5, y: 48.9 },
     walkableArea: [
@@ -260,7 +274,7 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'W-spot-1',    x: 25.8, y: 71,   connections: ['W-spot-3', 'W-spot-2', 'W-new-12'] },
       { id: 'W-spot-2',    x: 37.9, y: 68.2, connections: ['W-spot-1', 'W-spot-4', 'W-spot-7', 'W-new-2'] },
       { id: 'W-spot-9',    x: 55.2, y: 66.8, connections: ['W-filing', 'W-spot-5', 'W-spot-7', 'W-spot-10'] },
-      { id: 'W-spot-10',   x: 68.7, y: 66.2, connections: ['W-spot-9', 'W-spot-8', 'W-door-3', 'W-coffee-1'] },
+      { id: 'W-spot-10',   x: 68.7, y: 66.2, connections: ['W-spot-9', 'W-spot-8', 'W-door-3', 'W-coffee-1', 'W-biz-m1', 'W-biz-m2', 'W-biz-m3'] },
       { id: 'W-spot-7',    x: 52.7, y: 78.8, connections: ['W-spot-9', 'W-spot-2', 'W-spot-8'] },
       { id: 'W-spot-8',    x: 65.9, y: 75.8, connections: ['W-spot-7', 'W-spot-10', 'W-new-22'] },
       { id: 'W-coffee-1',  x: 73.5, y: 56.7, connections: ['W-door-3', 'W-coffee-2', 'W-spot-10'] },
@@ -286,6 +300,11 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'W-new-22',    x: 76.3, y: 70.5, connections: ['W-spot-8', 'W-new-24'] },
       { id: 'W-new-23',    x: 66.8, y: 75.6, connections: ['W-printer'] },
       { id: 'W-new-24',    x: 81.3, y: 62.5, connections: ['W-new-22'] },
+
+      // Community: beside the right-hand dev cluster, off the coffee corner
+      { id: 'W-biz-m1', x: 74.5, y: 63.5, connections: ['W-spot-10'] },
+      { id: 'W-biz-m2', x: 79.0, y: 60.0, connections: ['W-spot-10'] },
+      { id: 'W-biz-m3', x: 83.0, y: 57.0, connections: ['W-spot-10'] },
     ],
   },
 
@@ -313,6 +332,13 @@ export const ROOMS: Record<RoomId, Room> = {
       { toRoom: 'meeting-room', position: { x: 31, y: 51.5 }, label: 'Meeting Room', exitFacing: 'rear-left', entryFacing: 'front-right', door: { x: 25, y: 22.9, w: 9, h: 28.4 } },
       { toRoom: 'server-room', position: { x: 62.3, y: 54 }, label: 'Server Room', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 58.8, y: 23.8, w: 8.9, h: 29.8 } },
       { toRoom: 'lunch-room', position: { x: 74.2, y: 59.3 }, label: 'Lunch Room', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 70.8, y: 30.4, w: 9, h: 28.2 } },
+      // Floor 2: a lift bank between the meeting room's door and the manager's
+      // nameplate — four small panels, so the walk stays "own door -> corridor
+      // -> their door" without drawing four full doors on one wall.
+      { toRoom: 'business-suite', position: { x: 36.0, y: 51.5 }, label: 'Business Suite (lift)', exitFacing: 'rear-left', entryFacing: 'front-right', door: { x: 34.4, y: 45.5, w: 3.2, h: 6.0 } },
+      { toRoom: 'creative-studio', position: { x: 40.0, y: 51.5 }, label: 'Creative Studio (lift)', exitFacing: 'rear-left', entryFacing: 'front-right', door: { x: 38.4, y: 45.5, w: 3.2, h: 6.0 } },
+      { toRoom: 'finance-legal', position: { x: 44.0, y: 51.5 }, label: 'Finance & Legal (lift)', exitFacing: 'rear-left', entryFacing: 'front-right', door: { x: 42.4, y: 45.5, w: 3.2, h: 6.0 } },
+      { toRoom: 'exec-floor', position: { x: 48.0, y: 51.5 }, label: 'Exec Floor (lift)', exitFacing: 'rear-left', entryFacing: 'front-right', door: { x: 46.4, y: 45.5, w: 3.2, h: 6.0 } },
     ],
     landmarks: [
       { id: 'front-door', kind: 'front-door', label: 'Lift', x: 14.5, y: 63 },
@@ -325,10 +351,16 @@ export const ROOMS: Record<RoomId, Room> = {
     waypoints: [
       { id: 'W-corr-lift', x: 14.5, y: 63.0, connections: ['W-corr-hub', 'W-corr-meeting'] },
       { id: 'W-corr-meeting', x: 31.0, y: 51.5, connections: ['W-corr-hub', 'W-corr-lift'] },
-      { id: 'W-corr-hub', x: 50.5, y: 63.3, connections: ['W-corr-lift', 'W-corr-lunch', 'W-corr-meeting', 'W-corr-server'] },
+      { id: 'W-corr-hub', x: 50.5, y: 63.3, connections: ['W-corr-lift', 'W-corr-lunch', 'W-corr-meeting', 'W-corr-server', 'W-corr-floor2'] },
       { id: 'W-corr-server', x: 62.3, y: 54.0, connections: ['W-corr-hub', 'W-corr-lunch'] },
       { id: 'W-corr-lunch', x: 74.2, y: 59.3, connections: ['W-corr-hub', 'W-corr-office', 'W-corr-server'] },
       { id: 'W-corr-office', x: 86.4, y: 66.0, connections: ['W-corr-lunch'] },
+      // The lift landing: one junction for the four floor-2 doors
+      { id: 'W-corr-floor2', x: 51.8, y: 60.4, connections: ['W-corr-hub', 'W-corr-biz', 'W-corr-creative', 'W-corr-finance', 'W-corr-exec'] },
+      { id: 'W-corr-biz', x: 36.0, y: 51.5, connections: ['W-corr-floor2'] },
+      { id: 'W-corr-creative', x: 40.0, y: 51.5, connections: ['W-corr-floor2'] },
+      { id: 'W-corr-finance', x: 44.0, y: 51.5, connections: ['W-corr-floor2'] },
+      { id: 'W-corr-exec', x: 48.0, y: 51.5, connections: ['W-corr-floor2'] },
     ],
   },
 
@@ -433,12 +465,22 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'srv-4', type: 'standing', x: 35.3, y: 57.7, facing: 'up', spriteFacing: 'rear-left', zIndex: 53 },
       { id: 'srv-5', type: 'standing', x: 30.4, y: 61.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 54 },
       { id: 'srv-6', type: 'standing', x: 25.6, y: 64.4, facing: 'up', spriteFacing: 'rear-left', zIndex: 55 },
+
+      { id: 'biz-s1', type: 'desk', x: 68.0, y: 60.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 62 },
+      { id: 'biz-s2', type: 'desk', x: 72.5, y: 63.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 63 },
+      { id: 'biz-s3', type: 'desk', x: 77.0, y: 66.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 64 },
+      { id: 'biz-s4', type: 'desk', x: 66.0, y: 68.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 66 },
+      { id: 'biz-s5', type: 'desk', x: 70.5, y: 71.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 67 },
+      { id: 'biz-s6', type: 'desk', x: 75.0, y: 74.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 68 },
+      { id: 'biz-s7', type: 'desk', x: 62.0, y: 74.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 70 },
+      { id: 'biz-s8', type: 'desk', x: 66.5, y: 77.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 71 },
+      { id: 'biz-s9', type: 'desk', x: 58.0, y: 80.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 72 },
     ],
     entryPoint: { x: 68.5, y: 53 },
     walkableArea: [{ x: 43.8, y: 38.8 }, { x: 93.0, y: 65.6 }, { x: 54.5, y: 94.0 }, { x: 6.0, y: 64.6 }],
     waypoints: [
       { id: 'W-srv-door', x: 68.5, y: 53.0, connections: ['W-srv-in'] },
-      { id: 'W-srv-in', x: 63.9, y: 55.3, connections: ['W-srv-aisle-1', 'W-srv-door'] },
+      { id: 'W-srv-in', x: 63.9, y: 55.3, connections: ['W-srv-aisle-1', 'W-srv-door', 'W-srv-biz'] },
       { id: 'W-srv-aisle-1', x: 56.6, y: 51.3, connections: ['W-srv-1', 'W-srv-aisle-2', 'W-srv-in'] },
       { id: 'W-srv-aisle-2', x: 46.9, y: 58.1, connections: ['W-srv-2', 'W-srv-3', 'W-srv-aisle-1', 'W-srv-aisle-3'] },
       { id: 'W-srv-aisle-3', x: 37.2, y: 65.0, connections: ['W-srv-4', 'W-srv-5', 'W-srv-aisle-2', 'W-srv-aisle-4'] },
@@ -449,6 +491,18 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'W-srv-4', x: 35.3, y: 57.7, connections: ['W-srv-aisle-3'] },
       { id: 'W-srv-5', x: 30.4, y: 61.0, connections: ['W-srv-aisle-3'] },
       { id: 'W-srv-6', x: 25.6, y: 64.4, connections: ['W-srv-aisle-4'] },
+
+      // Core Ops: their own row of desks, reached from the door side of the room
+      { id: 'W-srv-biz', x: 64.0, y: 64.0, connections: ['W-srv-in', 'W-biz-s1', 'W-biz-s2', 'W-biz-s3', 'W-biz-s4', 'W-biz-s5', 'W-biz-s6', 'W-biz-s7', 'W-biz-s8', 'W-biz-s9'] },
+      { id: 'W-biz-s1', x: 68.0, y: 60.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s2', x: 72.5, y: 63.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s3', x: 77.0, y: 66.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s4', x: 66.0, y: 68.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s5', x: 70.5, y: 71.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s6', x: 75.0, y: 74.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s7', x: 62.0, y: 74.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s8', x: 66.5, y: 77.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s9', x: 58.0, y: 80.0, connections: ['W-srv-biz'] },
     ],
   },
 
@@ -521,6 +575,171 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'W-lunch-6', x: 65.0, y: 69.0, connections: ['W-lunch-east'] },
       { id: 'W-lunch-7', x: 65.9, y: 74.3, connections: ['W-lunch-east'] },
       { id: 'W-lunch-8', x: 57.7, y: 74.4, connections: ['W-lunch-east'] },
+    ],
+  },
+
+  // ── Floor 2 ───────────────────────────────────────────────────────────────
+  // Four rooms the business team works in. No new art: each one points its
+  // background at a room already drawn and reuses that room's measured floor,
+  // door and entry point (docs/hermes-office/ROOMS.md). What is new here is
+  // only the business desks, which carry their own `biz-*` ids so no dev spot
+  // is ever taken.
+  'business-suite': {
+    id: 'business-suite',
+    name: 'Business Suite',
+    description: 'Orchestrator, Sales, Marketing and Ops — where the business team is coordinated',
+    floor: 2,
+    artReuse: 'meeting-room',
+    background: {
+      day: '/rooms/meeting-room-day.webp',
+      night: '/rooms/meeting-room-night.webp',
+    },
+    width: 800,
+    height: 600,
+    furniture: [],
+    connections: [
+      { toRoom: 'corridor', position: { x: 68, y: 51.5 }, label: 'Corridor (lift)', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 64.8, y: 21.8, w: 8.4, h: 28.4 } },
+    ],
+    agentSpots: [
+      { id: 'biz-b1', type: 'desk', x: 33.3, y: 64.4, facing: 'down', spriteFacing: 'front-right', zIndex: 40 },
+      { id: 'biz-b2', type: 'desk', x: 38.6, y: 60.8, facing: 'down', spriteFacing: 'front-right', zIndex: 41 },
+      { id: 'biz-b3', type: 'desk', x: 43.9, y: 57.1, facing: 'down', spriteFacing: 'front-right', zIndex: 42 },
+      { id: 'biz-b4', type: 'desk', x: 49.2, y: 53.5, facing: 'down', spriteFacing: 'front-right', zIndex: 43 },
+      { id: 'biz-b5', type: 'desk', x: 46.5, y: 74.1, facing: 'up', spriteFacing: 'rear-left', zIndex: 60 },
+      { id: 'biz-b6', type: 'desk', x: 52.0, y: 70.3, facing: 'up', spriteFacing: 'rear-left', zIndex: 61 },
+    ],
+    entryPoint: { x: 68, y: 51.5 },
+    walkableArea: [{ x: 43.8, y: 37.0 }, { x: 93.0, y: 63.9 }, { x: 53.7, y: 93.1 }, { x: 5.9, y: 63.4 }],
+    waypoints: [
+      { id: 'W-biz-door', x: 68.0, y: 51.5, connections: ['W-biz-hub'] },
+      { id: 'W-biz-hub', x: 57.0, y: 63.0, connections: ['W-biz-door', 'W-biz-1', 'W-biz-2', 'W-biz-3', 'W-biz-4', 'W-biz-5', 'W-biz-6'] },
+      { id: 'W-biz-1', x: 33.3, y: 64.4, connections: ['W-biz-hub'] },
+      { id: 'W-biz-2', x: 38.6, y: 60.8, connections: ['W-biz-hub'] },
+      { id: 'W-biz-3', x: 43.9, y: 57.1, connections: ['W-biz-hub'] },
+      { id: 'W-biz-4', x: 49.2, y: 53.5, connections: ['W-biz-hub'] },
+      { id: 'W-biz-5', x: 46.5, y: 74.1, connections: ['W-biz-hub'] },
+      { id: 'W-biz-6', x: 52.0, y: 70.3, connections: ['W-biz-hub'] },
+    ],
+  },
+
+  'creative-studio': {
+    id: 'creative-studio',
+    name: 'Creative Studio',
+    description: 'Growth, product and the premium pipeline: analytics, design, pricing, publishing',
+    floor: 2,
+    artReuse: 'main-office',
+    background: {
+      day: '/rooms/office-day.png',
+      night: '/rooms/office-night.png',
+    },
+    width: 800,
+    height: 600,
+    furniture: [],
+    connections: [
+      { toRoom: 'corridor', position: { x: 67.5, y: 48.9 }, label: 'Corridor (lift)', exitFacing: 'rear-right', entryFacing: 'front-right', door: { x: 64.8, y: 21.8, w: 7.7, h: 27.3 } },
+    ],
+    agentSpots: [
+      { id: 'biz-c1', type: 'desk', x: 25.8, y: 71.0, facing: 'down', spriteFacing: 'rear-left', zIndex: 85 },
+      { id: 'biz-c2', type: 'desk', x: 37.9, y: 68.2, facing: 'down', spriteFacing: 'rear-right', zIndex: 85 },
+      { id: 'biz-c3', type: 'desk', x: 26.9, y: 59.2, facing: 'down', spriteFacing: 'front-left', zIndex: 40 },
+      { id: 'biz-c4', type: 'desk', x: 38.5, y: 55.2, facing: 'down', spriteFacing: 'rear-left', zIndex: 58 },
+      { id: 'biz-c5', type: 'desk', x: 48.9, y: 52.9, facing: 'down', spriteFacing: 'rear-right', zIndex: 70 },
+      { id: 'biz-c6', type: 'desk', x: 38.8, y: 43.6, facing: 'down', spriteFacing: 'front-left', zIndex: 30 },
+      { id: 'biz-c7', type: 'desk', x: 52.7, y: 78.8, facing: 'down', spriteFacing: 'rear-left', zIndex: 95 },
+      { id: 'biz-c8', type: 'desk', x: 65.9, y: 75.8, facing: 'down', spriteFacing: 'rear-right', zIndex: 95 },
+      { id: 'biz-c9', type: 'desk', x: 55.2, y: 66.8, facing: 'down', spriteFacing: 'front-left', zIndex: 55 },
+      { id: 'biz-c10', type: 'desk', x: 68.7, y: 66.2, facing: 'down', spriteFacing: 'front-right', zIndex: 55 },
+    ],
+    entryPoint: { x: 67.5, y: 48.9 },
+    walkableArea: [
+      { x: 28.2, y: 46 }, { x: 33, y: 50.2 }, { x: 20.6, y: 60.9 }, { x: 21.8, y: 65.5 },
+      { x: 32, y: 71.4 }, { x: 41.6, y: 62.7 }, { x: 40.8, y: 58.1 }, { x: 45.5, y: 56.3 },
+      { x: 49.3, y: 54.5 }, { x: 51.3, y: 52.2 }, { x: 51.9, y: 49.3 }, { x: 51.5, y: 46.7 },
+      { x: 57.9, y: 47.3 }, { x: 64.2, y: 47.4 }, { x: 70, y: 49.9 }, { x: 71.2, y: 55.4 },
+      { x: 78.8, y: 60.7 }, { x: 86.7, y: 65.6 }, { x: 82.6, y: 72.8 }, { x: 71.5, y: 68.4 },
+      { x: 59.5, y: 57.1 }, { x: 54.7, y: 61.9 }, { x: 51.4, y: 65.9 }, { x: 49.8, y: 70.1 },
+      { x: 50, y: 75.3 }, { x: 54.3, y: 78.2 }, { x: 58.1, y: 80 }, { x: 62.5, y: 78.9 },
+      { x: 64.9, y: 76 }, { x: 68.4, y: 73.3 }, { x: 70.4, y: 71.1 }, { x: 71.7, y: 69.3 },
+      { x: 82.7, y: 73.4 }, { x: 54.3, y: 93.6 }, { x: 37.6, y: 84 }, { x: 23.5, y: 75.6 },
+      { x: 12.6, y: 68.8 }, { x: 3.9, y: 62.9 }, { x: 33.7, y: 42.4 }, { x: 35.5, y: 48.6 },
+    ],
+    waypoints: [
+      { id: 'W-creative-door', x: 67.5, y: 48.9, connections: ['W-creative-hub'] },
+      { id: 'W-creative-hub', x: 55.5, y: 60.0, connections: ['W-creative-door', 'W-creative-1', 'W-creative-2', 'W-creative-3', 'W-creative-4', 'W-creative-5', 'W-creative-6', 'W-creative-7', 'W-creative-8', 'W-creative-9', 'W-creative-10'] },
+      { id: 'W-creative-1', x: 25.8, y: 71.0, connections: ['W-creative-hub'] },
+      { id: 'W-creative-2', x: 37.9, y: 68.2, connections: ['W-creative-hub'] },
+      { id: 'W-creative-3', x: 26.9, y: 59.2, connections: ['W-creative-hub'] },
+      { id: 'W-creative-4', x: 38.5, y: 55.2, connections: ['W-creative-hub'] },
+      { id: 'W-creative-5', x: 48.9, y: 52.9, connections: ['W-creative-hub'] },
+      { id: 'W-creative-6', x: 38.8, y: 43.6, connections: ['W-creative-hub'] },
+      { id: 'W-creative-7', x: 52.7, y: 78.8, connections: ['W-creative-hub'] },
+      { id: 'W-creative-8', x: 65.9, y: 75.8, connections: ['W-creative-hub'] },
+      { id: 'W-creative-9', x: 55.2, y: 66.8, connections: ['W-creative-hub'] },
+      { id: 'W-creative-10', x: 68.7, y: 66.2, connections: ['W-creative-hub'] },
+    ],
+  },
+
+  'finance-legal': {
+    id: 'finance-legal',
+    name: 'Finance & Legal',
+    description: 'Revenue, payments, DMCA and SecOps — the room that keeps the books and the rules',
+    floor: 2,
+    artReuse: 'server-room',
+    background: {
+      day: '/rooms/server-room-day.webp',
+      night: '/rooms/server-room-night.webp',
+    },
+    width: 800,
+    height: 600,
+    furniture: [],
+    connections: [
+      { toRoom: 'corridor', position: { x: 68.5, y: 53 }, label: 'Corridor (lift)', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 64.6, y: 24, w: 9.4, h: 29.6 } },
+    ],
+    agentSpots: [
+      { id: 'biz-f1', type: 'desk', x: 30.4, y: 61.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 54 },
+      { id: 'biz-f2', type: 'desk', x: 35.3, y: 57.7, facing: 'up', spriteFacing: 'rear-left', zIndex: 53 },
+      { id: 'biz-f3', type: 'desk', x: 40.1, y: 54.3, facing: 'up', spriteFacing: 'rear-left', zIndex: 52 },
+      { id: 'biz-f4', type: 'desk', x: 45.0, y: 50.9, facing: 'up', spriteFacing: 'rear-left', zIndex: 51 },
+    ],
+    entryPoint: { x: 68.5, y: 53 },
+    walkableArea: [{ x: 43.8, y: 38.8 }, { x: 93.0, y: 65.6 }, { x: 54.5, y: 94.0 }, { x: 6.0, y: 64.6 }],
+    waypoints: [
+      { id: 'W-fin-door', x: 68.5, y: 53.0, connections: ['W-fin-hub'] },
+      { id: 'W-fin-hub', x: 55.0, y: 60.0, connections: ['W-fin-door', 'W-fin-1', 'W-fin-2', 'W-fin-3', 'W-fin-4'] },
+      { id: 'W-fin-1', x: 30.4, y: 61.0, connections: ['W-fin-hub'] },
+      { id: 'W-fin-2', x: 35.3, y: 57.7, connections: ['W-fin-hub'] },
+      { id: 'W-fin-3', x: 40.1, y: 54.3, connections: ['W-fin-hub'] },
+      { id: 'W-fin-4', x: 45.0, y: 50.9, connections: ['W-fin-hub'] },
+    ],
+  },
+
+  'exec-floor': {
+    id: 'exec-floor',
+    name: 'Exec Floor',
+    description: 'The boss’s room upstairs: final calls, approvals and a quiet desk',
+    floor: 2,
+    artReuse: 'meeting-room',
+    background: {
+      day: '/rooms/meeting-room-day.webp',
+      night: '/rooms/meeting-room-night.webp',
+    },
+    width: 800,
+    height: 600,
+    furniture: [],
+    connections: [
+      { toRoom: 'corridor', position: { x: 68, y: 51.5 }, label: 'Corridor (lift)', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 64.8, y: 21.8, w: 8.4, h: 28.4 } },
+    ],
+    agentSpots: [
+      { id: 'exec-1', type: 'desk', x: 33.3, y: 64.4, facing: 'down', spriteFacing: 'front-right', zIndex: 40 },
+      { id: 'exec-2', type: 'desk', x: 38.6, y: 60.8, facing: 'down', spriteFacing: 'front-right', zIndex: 41 },
+    ],
+    entryPoint: { x: 68, y: 51.5 },
+    walkableArea: [{ x: 43.8, y: 37.0 }, { x: 93.0, y: 63.9 }, { x: 53.7, y: 93.1 }, { x: 5.9, y: 63.4 }],
+    waypoints: [
+      { id: 'W-exec-door', x: 68.0, y: 51.5, connections: ['W-exec-hub'] },
+      { id: 'W-exec-hub', x: 55.0, y: 62.0, connections: ['W-exec-door', 'W-exec-1', 'W-exec-2'] },
+      { id: 'W-exec-1', x: 33.3, y: 64.4, connections: ['W-exec-hub'] },
+      { id: 'W-exec-2', x: 38.6, y: 60.8, connections: ['W-exec-hub'] },
     ],
   },
 }

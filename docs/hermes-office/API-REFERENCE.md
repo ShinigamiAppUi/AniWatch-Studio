@@ -195,9 +195,9 @@ Disisipkan ke `server/index.js` (2 baris):
 ```js
 import { registerBizRoutes, handleBizWsMessage } from './biz-events.js'
 // ... setelah app & db & broadcast siap:
-registerBizRoutes(app, db, broadcast)
-// ... di dalam wss.on('connection', ws => ws.on('message', raw => { ... })):
-handleBizWsMessage(ws, data)
+registerBizRoutes(app, db, broadcast, { requireToken, activeAgents })
+// ... di dalam wss.on('connection', ws => ...), dengan `trusted` hasil handshake:
+ws.on('message', data => { handleBizWsMessage(data, { trusted }) })
 ```
 
 ---
@@ -211,8 +211,7 @@ handleBizWsMessage(ws, data)
 | `agent_spawned` | agent mulai | `agent: {id, name, role, task}` |
 | `agent_working` | tool call | `agentId`, `status`, `tool`, `failed?` |
 | `agent_completed` | selesai | `agentId`, `result` |
-| `agent_error` | gagal | `agentId`, `error`, `retrying` |
-| `agent_waiting` | minta approval | `agentId`, `message`, `options[]` |
+| — | gagal / minta approval | **tidak ada tipe baru**: keduanya `agent_working` dengan `failed: true` atau status `✋ …` (§3.1) |
 | `biz_metric_update` | metric berubah | `metrics` (bentuk §2) |
 | `chat_message`, `permission_request`, `signal`, … | base | lihat `docs/reference.md` |
 
@@ -222,6 +221,10 @@ handleBizWsMessage(ws, data)
 | --- | --- | --- |
 | `approval_response` | `{agentId, decision}` | diteruskan `biz-events.js` → sidecar |
 | lainnya | base | tidak berubah |
+
+**Istilah:** `agent_error(...)` dan `agent_waiting(...)` adalah nama *fungsi bridge*
+(`hermes_bridge/bridge.py`), bukan tipe event. Di kabel keduanya `agent_working`
+(+`failed: true`, atau status `✋ …`), karena `KNOWN_EVENT_TYPES` base tidak berubah.
 
 `approval_response` adalah **satu-satunya** pesan baru dari UI. Kalau sidecar mati, WS tetap
 menerima pesan dan hanya menulis warning — UI tidak boleh menggantung.
@@ -281,35 +284,37 @@ sekilas (tool gagal) tanpa mengeluarkan karakter.
 
 **Dipanggil oleh:** `bridge.agent_done()` — tepat sekali per `agent_start`.
 
-#### `agent_error` — geleng, tetap di meja kalau retry
+#### gagal — `agent_working` dengan `failed: true`
 
 ```json
 {
-  "type": "agent_error",
+  "type": "agent_working",
   "agentId": "scraper-a1b2c3",
-  "error": "Source timeout setelah 3 percobaan",
-  "retrying": false
+  "status": "Source timeout setelah 3 percobaan",
+  "failed": true
 }
 ```
 
-**Efek visual:** bubble merah, karakter menggeleng. `retrying: true` → karakter **tetap** di meja;
-`false` → selesai seperti `agent_completed` tapi tanpa perayaan.
+**Efek visual:** bubble merah (❌). `retrying: true` → karakter **tetap** di meja; `false` → bridge
+langsung mengirim `agent_completed` dengan hasil `berhenti: …`, jadi karakter keluar tanpa perayaan.
 
-**Dipanggil oleh:** `bridge.agent_error()`.
+**Dipanggil oleh:** `bridge.agent_error()`. Base tidak punya tipe `agent_error`, dan fork ini tidak
+menambahkannya.
 
-#### `agent_waiting` — tangan naik ✋
+#### tangan naik ✋ — juga `agent_working`
 
 ```json
 {
-  "type": "agent_waiting",
+  "type": "agent_working",
   "agentId": "payment-9f8e7d",
-  "message": "Refund Rp 149.000 dari user 42, dibeli 3 hari lalu",
-  "options": ["Approve Refund", "Tolak", "Minta Info Lebih"]
+  "status": "✋ Refund Rp 149.000 dari user 42, dibeli 3 hari lalu"
 }
 ```
 
-**Efek visual:** karakter mengangkat tangan, sesi jadi amber, card muncul dengan satu tombol per
-`options`. Menjawab card mengirim `approval_response` lewat WS.
+**Efek visual (W2):** bubble status berisi ✋; tidak ada card di UI. Card dengan satu tombol per
+`options` **belum dibangun** — itu bagian W10 (PLAN.md). Yang sudah berjalan: `wait_for_approval()`
+mem-poll sidecar, dan `POST /approval-callback` (dipanggil `biz-events.js` saat kelak ada
+`approval_response` dari UI) mengisi mailbox itu.
 
 **Dipanggil oleh:** `bridge.agent_waiting()` — **sebelum** `wait_for_approval()`, tidak pernah
 sesudahnya.
@@ -329,7 +334,11 @@ Bukan animasi karakter.
 
 ## 4. FastAPI sidecar (8765)
 
-### `POST /webhook`
+**Sudah ada di W2** (`webhook_server/main.py`, `approval.py`): `GET /health`,
+`GET /approval/{agent_id}` (one-shot `pop`), `POST /approval-callback` (`{agentId, decision}` → 400
+kalau kosong). Tiga route di bawah ini **W3–W5**, belum ada di kode.
+
+### `POST /webhook` (W4 — belum ada)
 
 Header wajib `X-Webhook-Secret`. Body:
 
@@ -356,13 +365,13 @@ curl -s -X POST http://127.0.0.1:8765/webhook \
 ### `GET /approval/{agent_id}`
 
 Dipakai `wait_for_approval` (poll 3 dtk). `{"decision": null}` selama belum ada, lalu
-`{"decision": "Approve"}` **satu kali** (one-shot `pop`).
+`{"decision": "Approve"}` **satu kali** (one-shot `pop`). Entri lebih tua dari 6 jam dibuang.
 
 ### `POST /approval-callback`
 
 Body `{agentId, decision}`. Dipanggil `biz-events.js`. 400 kalau salah satu kosong.
 
-### `POST /webhook/payment`
+### `POST /webhook/payment` (W5 — belum ada)
 
 Notifikasi Midtrans. Header `X-Signature-Key` harus sama dengan
 `sha512(order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY)` (explicit `utf-8`,
@@ -370,7 +379,7 @@ Notifikasi Midtrans. Header `X-Signature-Key` harus sama dengan
 
 ### `GET /health`
 
-`{"status":"ok"}`. Tidak menyentuh office; dipakai `doctor`.
+`{"status":"ok","pending_approvals":n}`. Tidak menyentuh office.
 
 ---
 
@@ -416,8 +425,9 @@ bridge.agent_update(aid, "Menerjemahkan via DeepL...", tool="translate_text")
 
 ### `agent_waiting(agent_id, message, options) -> None`
 
-Menampilkan permission card ✋. **Wajib dipanggil sebelum** `wait_for_approval` — kalau dibalik,
-agent polling untuk card yang belum pernah muncul (fix Rev 3 #1).
+Menaikkan tangan ✋ lewat bubble status (`agent_working`); `options` divalidasi dan disimpan bridge
+untuk card di W10. **Wajib dipanggil sebelum** `wait_for_approval` — kalau dibalik, agent polling
+untuk card yang belum pernah muncul (fix Rev 3 #1).
 
 ```python
 bridge.agent_waiting(aid, "QA 0.62 di bawah 0.75. Lanjutkan?",
