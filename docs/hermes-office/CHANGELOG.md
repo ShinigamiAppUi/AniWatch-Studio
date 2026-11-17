@@ -1,5 +1,34 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 3.8 — 17 Nov 2026 (W7: premium pipeline)
+
+### Ditambahkan
+
+- `hermes_agents/premium.py`: pipeline `draft → qa_passed → priced → previewed → pending_approval →
+  approved → live`. Tiga variasi SVG deterministik per item (palet tema `neon`/`sakura`/`ocean`),
+  `design_source: "template"`; QA tiga cek nyata (resolusi, warna di luar palet, transparansi) dengan
+  satu kesempatan desain ulang lalu `rejected`; harga dari tabel `TIERS` atas jumlah elemen;
+  `preview-light.svg`/`preview-dark.svg`.
+- `premium.decide()` sebagai **satu penulis** status approval, dipakai tombol kartu
+  (`request_approval` → `char.ask`, timeout 24 jam) dan `/approve`; `publish()` idempoten dan menulis
+  manifest `media/published/premium/<id>.json` dengan `cdn.uploaded: false` + alasannya.
+- `webhook_server/commands.py` + `POST /command` di sidecar: `/design`, `/pending-items`,
+  `/approve` dengan balasan satu pesan chat (maks 6 baris).
+- `server/biz-events.js`: `bizSlashCommand()` merelai baris itu ke sidecar; `POST /chat` di
+  `server/index.js` kini `async` dan memakai relay tersebut setelah command base tidak cocok.
+- `tests/biz-commands.test.ts`: 8 test relay (hanya tiga command, command base tidak direlai,
+  sidecar mati → pesan menyebut command, baris panjang di-clamp).
+
+### Diubah
+
+- Dokumen yang sebelumnya menjanjikan image model di DesignAgent kini menyatakan yang sebenarnya:
+  fork tidak memanggil provider image-gen (ENV-VARS §3, AGENTS §4.5, PLAN W7).
+- Selfcheck: **154 PASS / 0 FAIL** (15 cek W7: /design, /pending-items, /approve, kartu, Reject,
+  Revisi, timeout, manifest, publish ganda, route `/command`).
+- API-REFERENCE §4/§6, DB-SCHEMA §8, SECURITY §4.2, PLAN W7 ikut diperbarui dalam commit yang sama.
+
+---
+
 ## Rev 3.7 — 17 Nov 2026 (W6: growth)
 
 ### Ditambahkan

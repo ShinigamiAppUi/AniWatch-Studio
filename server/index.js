@@ -47,7 +47,7 @@ import {
   lanFullRouteAllowed, createLockout,
 } from './lan.js'
 import { loadOrCreateLanCert } from './lan-cert.js'
-import { registerBizRoutes, handleBizWsMessage } from './biz-events.js'
+import { registerBizRoutes, handleBizWsMessage, bizSlashCommand } from './biz-events.js'
 import { createRecap, recapLine, isRecapDate, localDate } from './recap.js'
 import { createPromptQueue, parseMention, resolveMention, mentionName, MARKER_DIR_NAME, MAX_PROMPT_LEN, MAX_QUEUED_PER_SESSION } from './prompt-queue.js'
 
@@ -2406,7 +2406,7 @@ function queuePromptFromChat(req, res, { sender, text, mention, found }) {
  * No auth required for a plain line or a read-only slash command (comes from
  * the UI, not hooks); a privileged command (/clear) needs the bearer token.
  */
-app.post('/chat', (req, res) => {
+async function handleChatPost(req, res) {
   const { sender, text } = req.body ?? {}
   if (!sender || !text) {
     return res.status(400).json({ error: 'Missing sender or text' })
@@ -2429,6 +2429,18 @@ app.post('/chat', (req, res) => {
       const userMsg = addMessage({ sender: clampString(sender), text: clampString(text, 2000) })
       broadcast({ type: 'chat_message', ...userMsg })
       const sysMsg = addMessage({ sender: 'system', text: cmdResult, isSystem: true })
+      broadcast({ type: 'chat_message', ...sysMsg, isSystem: true })
+      return res.json({ ok: true })
+    }
+
+    // Business commands (/design, /pending-items, /approve) are answered by the
+    // sidecar, which owns the premium pipeline (server/biz-events.js, W7). The
+    // base commands above win, so nothing here can shadow /status or /clear.
+    const bizReply = await bizSlashCommand(text)
+    if (bizReply) {
+      const userMsg = addMessage({ sender: clampString(sender), text: clampString(text, 2000) })
+      broadcast({ type: 'chat_message', ...userMsg })
+      const sysMsg = addMessage({ sender: 'system', text: bizReply, isSystem: true })
       broadcast({ type: 'chat_message', ...sysMsg, isSystem: true })
       return res.json({ ok: true })
     }
@@ -2463,6 +2475,18 @@ app.post('/chat', (req, res) => {
 
   console.log(`[chat] ${msg.sender}: ${msg.text}`)
   res.json({ ok: true })
+}
+
+// Express 4 does not catch a rejected promise from an async handler, so a
+// throwing handler would leave the request hanging instead of answering 500
+// (tests/hardening.test.ts C18). The wrapper hands the error to Express exactly
+// the way a synchronous handler's throw was handed over before W7.
+app.post('/chat', async (req, res, next) => {
+  try {
+    await handleChatPost(req, res)
+  } catch (err) {
+    next(err)
+  }
 })
 
 // ---------------------------------------------------------------------------

@@ -383,6 +383,31 @@ Dipakai `wait_for_approval` (poll 3 dtk). `{"decision": null}` selama belum ada,
 
 Body `{agentId, decision}`. Dipanggil `biz-events.js`. 400 kalau salah satu kosong.
 
+### `POST /command` (W7)
+
+Pintu slash command bisnis dari chat panel. Body `{"text": "/design border neon"}`; jawaban
+`{handled, ok, reply}`. Hanya loopback, tanpa secret sendiri — sama seperti `/approval-callback`,
+keamanannya adalah binding loopback (SECURITY.md §4.2). `handled: false` berarti baris itu bukan
+command bisnis dan tetap menjadi pesan chat biasa.
+
+`/design` menjawab segera (item sudah `pending_approval`); kartu approval-nya diangkat worker thread
+(`premium.request_approval`) karena `char.ask` menunggu tombol. Tiga command yang dilayani:
+
+| Command | Efek |
+| --- | --- |
+| `/design [kind] [tema]` | buat item + design/QA/harga/preview, lalu antrikan kartu approval |
+| `/pending-items` | daftar `status='pending_approval'`, maks 6 baris |
+| `/approve [id]` | `premium.decide('Approve')` — penulis status yang sama dengan tombol kartu |
+
+`server/biz-events.js` yang merelai: `bizSlashCommand()` mengirim baris yang cocok ke sini dan
+mengembalikan `reply`-nya ke chat; sidecar mati → jawaban menyebut command yang tidak dijalankan.
+
+```bash
+curl -s -X POST http://127.0.0.1:8765/command \
+  -H 'Content-Type: application/json' -d '{"text":"/pending-items"}'
+# → {"handled":true,"ok":true,"reply":"🗂 1 item menunggu approval:\n- pm-1a2b border/neon ..."}
+```
+
 ### `POST /webhook/payment` (W4 — verifikasi + catat; agent PaymentAgent W9)
 
 Notifikasi Midtrans. Header `X-Signature-Key` harus sama dengan
@@ -516,7 +541,10 @@ Ditangani di `server/index.js` sebelum event diproses.
 
 ### Bisnis (baru)
 
-Didaftarkan di chat routing yang sama. Format: `<command> [arg]`.
+Didaftarkan di chat routing yang sama. Format: `<command> [arg]`. **W7 sudah hidup:** `/design`,
+`/pending-items`, `/approve` — base command di `server/index.js` menang lebih dulu, lalu baris yang
+cocok direlai `bizSlashCommand()` ke sidecar `POST /command`. Sisanya di tabel bawah ini masih
+rencana (W9/W10), dan kantor tidak mengaku menjalankannya.
 
 | Command | Output | Sumber data |
 | --- | --- | --- |

@@ -78,8 +78,8 @@ set nilai acak panjang — jangan kosongkan, dan jangan matikan verifikasi.
 | `TELEGRAM_BOT_TOKEN` | SocialMedia, Notifier | post Telegram dilewati |
 | `TELEGRAM_CHANNEL_ID` | idem | idem |
 | `TWITTER_BEARER_TOKEN` | SocialMedia | post X dilewati |
-| `IMAGE_GEN_API_KEY` | DesignAgent | DesignAgent berhenti di langkah pertama |
-| `IMAGE_GEN_PROVIDER` | DesignAgent | default `stability` (`dalle` \| `stability`) |
+| `IMAGE_GEN_API_KEY` | DesignAgent (rencana) | **tidak dipanggil**: W7 membuat desain dari template SVG, dan context mencatat `image_gen: "belum diimplementasikan"` kalau variabel ini diisi |
+| `IMAGE_GEN_PROVIDER` | DesignAgent (rencana) | idem — tidak ada provider image-gen yang dipanggil fork ini |
 | `CDN_API_KEY` | Encoder, Publisher, DMCA | upload/purge CDN gagal → `agent_error` |
 | `CDN_BASE_URL` | idem | URL file tidak bisa dibentuk |
 | `TRANSLATION_PROVIDER` | TranslationAgent | default `deepl` (`deepl` \| `openai` \| `local`) |
@@ -298,7 +298,7 @@ dijalankan terpisah); scheduler membaca env saat start.
 | Publisher / Encoder | `CDN_API_KEY`, `CDN_BASE_URL` | upload gagal, item tidak pernah live |
 | Support lewat Gmail | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` | `check_new_emails` log sekali per jam, bukan tiap 5 menit |
 | Sales lewat HubSpot | `HUBSPOT_API_KEY` | `update_crm` jadi no-op + warning |
-| DesignAgent | `IMAGE_GEN_API_KEY` (+ `IMAGE_GEN_PROVIDER`) | berhenti di langkah pertama |
+| DesignAgent | `IMAGE_GEN_API_KEY` (+ `IMAGE_GEN_PROVIDER`) | tidak berpengaruh: desain dari template SVG, dan hasilnya menyebutkan itu |
 | Notifier / SocialMedia | `DISCORD_WEBHOOK_URL`, `TELEGRAM_*` | platform itu dilewati (`skipped` menyebut nama variabelnya), feed tetap ditulis |
 | Recommendation batch | `RECOMMENDATION_DB` | ditulis ke `media/published/recommendations.jsonl` |
 | Analytics / Marketing | `ANALYTICS_FEED` | hanya data lokal; angka tontonan dan drop-off dinyatakan belum ada |

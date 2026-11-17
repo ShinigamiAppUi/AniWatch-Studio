@@ -451,6 +451,7 @@ def main() -> int:
         """A stand-in for the office character: records the card, returns a choice."""
 
         def __init__(self, decision: str) -> None:
+            self.id = 'selfcheck-card'
             self.decision = decision
             self.asks: list[tuple] = []
             self.updates: list[str] = []
@@ -911,6 +912,98 @@ def main() -> int:
           all(name in w4triggers.AGENT_HANDLERS for name in
               ('analytics_ready', 'weekly_analytics', 'content_schedule', 'announce_episode',
                'retention_check')), str(sorted(w4triggers.AGENT_HANDLERS)))
+
+    # 11. W7: premium — design -> QA -> price -> preview -> approval -> live ----
+    from hermes_agents import premium
+    from webhook_server import commands as w7commands
+
+    started = w7commands.handle_command('/design border neon', now=now)
+    made_id = str(started.get('item') or '')
+    made = premium.get_item(made_id) or {}
+    check('w7: /design creates a priced, previewed item waiting for approval',
+          started.get('ok') is True and made.get('status') == 'pending_approval'
+          and bool(made.get('tier')) and int(made.get('price_idr') or 0) > 0
+          and Path(str(made.get('design_path'))).exists()
+          and Path(str(made.get('preview_light'))).exists()
+          and Path(str(made.get('preview_dark'))).exists(), f'{started} {made.get("status")}')
+    made_ctx = store.context().get(premium.item_key(made_id)) or {}
+    check('w7: the design says it came from a template, not from an image model',
+          made_ctx.get('design_source') == 'template', str(made_ctx.get('design_source')))
+    check('w7: QA scored resolution, palette and transparency',
+          made.get('qa_score') == 1.0, str(made.get('qa_score')))
+
+    listing = w7commands.handle_command('/pending-items', now=now)
+    check('w7: /pending-items names the item that waits',
+          made_id in (listing.get('items') or []) and made_id in listing.get('reply', ''),
+          str(listing)[:200])
+    check('w7: a command it does not own is left to the chat',
+          w7commands.handle_command('/status')['handled'] is False)
+    bad = w7commands.handle_command('/design bingkai neon', now=now)
+    check('w7: an unknown kind is refused, with the choices',
+          bad.get('ok') is False and 'border' in bad.get('reply', ''), str(bad)[:160])
+
+    approved = w7commands.handle_command(f'/approve {made_id}', now=now)
+    live_row = premium.get_item(made_id) or {}
+    made_ctx = store.context().get(premium.item_key(made_id)) or {}
+    manifest_file = Path(str(made_ctx.get('manifest') or ''))
+    manifest = (json.loads(manifest_file.read_text(encoding='utf-8'))
+                if manifest_file.is_file() else {})
+    check('w7: /approve publishes the item', approved.get('ok') is True and live_row.get('status') == 'live',
+          f'{approved.get("reply")!r} {live_row.get("status")}')
+    check('w7: publish writes a manifest that says the CDN upload did not happen',
+          manifest.get('id') == made_id and manifest.get('cdn', {}).get('uploaded') is False
+          and manifest.get('live_at') == now, str(manifest)[:160])
+    check('w7: approving a live item again is a no-op, not a second publish',
+          premium.publish(made_id, now=now).get('published') is False)
+
+    card_item = premium.start('nameplate', 'sakura', now=now)
+    carded = premium.request_approval(str(card_item['id']), char=_Card('Approve'), now=now)
+    check('w7: the card door writes the same status as /approve',
+          carded.get('status') == 'live'
+          and (premium.get_item(str(card_item['id'])) or {}).get('status') == 'live',
+          str(carded.get('status')))
+
+    rejected_item = premium.start('profile_effect', 'ocean', now=now)
+    rejected = premium.request_approval(str(rejected_item['id']), char=_Card('Reject'), now=now)
+    check('w7: Reject stops the pipeline and the item stays rejected',
+          rejected.get('status') == 'rejected', str(rejected.get('status')))
+
+    class _Reviser:
+        """Revisi on the first card, Approve on the second."""
+
+        def __init__(self) -> None:
+            self.id = 'selfcheck-reviser'
+            self.calls = 0
+
+        def update(self, *args, **kwargs) -> None:
+            pass
+
+        def ask(self, message: str, options, timeout: float = 300.0) -> str:
+            self.calls += 1
+            return 'Revisi' if self.calls == 1 else 'Approve'
+
+    revise_item = premium.start('border', 'ocean', now=now)
+    reviser = _Reviser()
+    revised = premium.request_approval(str(revise_item['id']), char=reviser, now=now)
+    revise_ctx = store.context().get(premium.item_key(str(revise_item['id']))) or {}
+    check('w7: Revisi runs DesignAgent again, and the second card can publish it',
+          reviser.calls == 2 and revised.get('status') == 'live'
+          and int(revise_ctx.get('attempt') or 0) >= 2,
+          f'{reviser.calls} kartu, {revised.get("status")}, attempt={revise_ctx.get("attempt")}')
+
+    timeout_item = premium.start('border', 'neon', now=now)
+    timed = premium.request_approval(str(timeout_item['id']), char=_Card('timeout'), now=now)
+    check('w7: a timeout leaves the item pending, so /approve can still take it',
+          timed.get('status') == 'pending_approval'
+          and (premium.get_item(str(timeout_item['id'])) or {}).get('status') == 'pending_approval',
+          str(timed.get('status')))
+
+    route = client.post('/command', json={'text': '/pending-items'}).json()
+    check('w7: the sidecar route answers a chat command with one reply',
+          route.get('handled') is True and route.get('ok') is True and 'pm-' in route.get('reply', ''),
+          str(route)[:160])
+    other = client.post('/command', json={'text': '/status'}).json()
+    check('w7: the route leaves a base command alone', other.get('handled') is False, str(other))
 
     support.close()
 

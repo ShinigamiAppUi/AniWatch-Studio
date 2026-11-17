@@ -519,18 +519,31 @@ DesignAgent 🎨 3–5 variasi → QAAgent ✅ filter → PricingAgent 💰 tier
 | ✅ QAAgent | `QAAgent` | `check_resolution`, `check_consistency`, `check_transparency` | desain yang lolos filter |
 | 💰 PricingAgent | `PricingAgent` | `analyze_complexity`, `assign_tier` | tier harga |
 | 👁️ PreviewAgent | `PreviewAgent` | `render_mockup`, `bundle_preview` | mockup light + dark |
-| 🚀 Publisher | `Publisher` | `upload_cdn`, `insert_db`, `activate_item` | item live di toko |
+| 🚀 Publisher | `Publisher` | `upload_cdn`, `insert_db`, `activate_item` | item `live` di DB + manifest |
 
 Detail per agent:
 
-- **DesignAgent** — trigger jadwal mingguan atau `/design [type] [tema]`; env `IMAGE_GEN_API_KEY`,
-  `IMAGE_GEN_PROVIDER` (`dalle` | `stability`). Kalau key kosong, berhenti di langkah pertama.
-- **QAAgent** — hanya meneruskan yang lolos; yang gagal dikembalikan ke DesignAgent, bukan dibuang.
-- **PricingAgent** — angka tier dari `analyze_complexity`, bukan perkiraan LLM bebas.
-- **PreviewAgent** — hasilnya yang dilihat CEO; `/pending-items` menampilkan status
-  `pending_approval`.
-- **Publisher** — hanya jalan setelah approval. `/approve [id]` menulis status yang sama dengan
-  tombol di card. Handoff → RevenueTracker saat item terjual.
+- **DesignAgent** — `/design [kind] [tema]` (kind: `border`, `nameplate`, `profile_effect`; tema:
+  `neon`, `sakura`, `ocean`). **Implementasi W7:** `hermes_agents/premium.py` membuat **tiga variasi
+  SVG deterministik** dari palet tema, `design_source: "template"`. Provider image-gen **tidak**
+  dipanggil: `IMAGE_GEN_API_KEY` yang diisi hanya dicatat sebagai `image_gen: "belum
+  diimplementasikan"`, bukan diklaim sudah dipakai.
+- **QAAgent** — tiga cek atas berkas yang ditulis: resolusi kanvas, warna di luar palet (tema tak
+  dikenal = gagal), dan latar penuh yang menutupi transparansi. Lolos → diteruskan; gagal → Design
+  mengulang sekali, lalu item `rejected` dengan `qa_problems` di context.
+- **PricingAgent** — tabel `TIERS` atas jumlah elemen (`basic` 15.000, `premium` 35.000, `deluxe`
+  75.000), bukan perkiraan LLM.
+- **PreviewAgent** — `preview-light.svg` + `preview-dark.svg` di `media/premium/<id>/`; kartu
+  approval (Approve/Revisi/Reject) diangkat dari sini, timeout **24 jam** (keputusan uang tidak
+  mewarisi 300 dtk). `/pending-items` menampilkan yang `pending_approval`.
+- **Publisher** — hanya dari status `approved`, idempoten (keputusan kedua tidak menulis manifest
+  kedua). Menulis `media/published/premium/<id>.json` dan status `live`; **tidak** meng-upload apa
+  pun, dan manifest menyatakan `cdn.uploaded: false` beserta alasannya. Handoff → RevenueTracker
+  saat item terjual belum ada (RevenueTracker W9).
+
+**Satu penulis status:** `premium.decide()` dipakai tombol kartu (lewat `request_approval` →
+`char.ask`) **dan** `/approve`, jadi kedua pintu berakhir di status yang sama. `timeout` tidak
+mengubah apa pun — item tetap `pending_approval` supaya `/approve` masih bisa mengambilnya.
 
 ---
 

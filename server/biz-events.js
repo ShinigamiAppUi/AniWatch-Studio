@@ -1,5 +1,5 @@
 /**
- * biz-events.js - the business team's two surfaces on the office server.
+ * biz-events.js - the business team's surfaces on the office server.
  *
  * 1. `biz_metrics` (Express): counters and gauges the business agents report.
  *    One row per (key, day) so "today" needs no midnight reset job — a new day
@@ -7,6 +7,10 @@
  * 2. `approval_response` (WebSocket): the one new message from the UI. A
  *    permission card's button is relayed to the FastAPI sidecar, where
  *    `bridge.wait_for_approval()` polls for it (docs/hermes-office/API-REFERENCE.md §4).
+ * 3. `bizSlashCommand` (chat): the business slash commands the chat panel types —
+ *    `/design`, `/pending-items`, `/approve` — are relayed to the sidecar's
+ *    `POST /command`, because the work lives in Python (W7). Nothing is
+ *    interpreted here: the reply is whatever the sidecar's agent said.
  *
  * Loaded by server/index.js, which passes in its `db`, `broadcast` and token
  * guard: this module owns no connection and no server of its own.
@@ -131,6 +135,50 @@ export function getBizMetrics(db, activeAgents = () => []) {
  *   a read-only page may look at the office but not decide for an agent
  * @returns {Promise<boolean>} true when the frame was an approval response
  */
+/** The business commands the chat accepts (docs/hermes-office/API-REFERENCE.md §6) */
+export const BIZ_SLASH_COMMANDS = ['/design', '/pending-items', '/approve']
+
+/** One command line, so `/designfoo` stays an ordinary chat message */
+const BIZ_COMMAND_RE = /^\/(design|pending-items|approve)(?:\s|$)/
+
+/** A chat line is short; the sidecar clamps again on its own side */
+const MAX_COMMAND_CHARS = 200
+
+/**
+ * Relay one business slash command to the sidecar and return its reply.
+ *
+ * Resolves to `null` when the line is not one of the business commands, so
+ * `POST /chat` can fall through to its base commands and then to a plain chat
+ * message. A sidecar that is down answers in the chat with the command named —
+ * a command that silently did nothing is the failure this avoids.
+ *
+ * @param {string} text the line typed in the chat panel
+ * @returns {Promise<string|null>} the chat line to show, or null
+ */
+export async function bizSlashCommand(text) {
+  const line = typeof text === 'string' ? text.trim().slice(0, MAX_COMMAND_CHARS) : ''
+  if (!BIZ_COMMAND_RE.test(line)) return null
+  const cmd = line.split(/\s+/)[0]
+  try {
+    const res = await fetch(`${SIDECAR_URL}/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: line }),
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (!res.ok) {
+      console.warn(`[biz-events] sidecar answered ${res.status} for ${cmd}`)
+      return `⚠️ Sidecar menjawab ${res.status} — ${cmd} tidak dijalankan`
+    }
+    const body = await res.json().catch(() => ({}))
+    const reply = typeof body?.reply === 'string' ? body.reply.trim() : ''
+    return reply || `✓ ${cmd} dikirim ke sidecar`
+  } catch (err) {
+    console.warn('[biz-events] sidecar unreachable:', err.message)
+    return `⚠️ Sidecar tidak bisa dihubungi — ${cmd} tidak dijalankan`
+  }
+}
+
 export async function handleBizWsMessage(data, { trusted = false } = {}) {
   if (!trusted) return false
   const raw = Buffer.isBuffer(data) ? data : Buffer.from(String(data))

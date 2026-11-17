@@ -12,6 +12,8 @@ jobs:
 - `POST /webhook/payment` - Midtrans notification, verified with SHA-512 over
   `order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY` and recorded once
   per notification (`webhook_server/payments.py`).
+- `POST /command` (W7) - the chat's business slash commands, relayed by
+  `server/biz-events.js`. Loopback-only, like `/approval-callback`.
 - `GET /health` - also lists the scheduler's jobs, and the ones waiting on W5-W9.
 
 Both secrets are required: startup raises `MissingSecrets` rather than run a
@@ -58,6 +60,10 @@ class WebhookBody(BaseModel):
     type: str
     data: object | None = None
     source: str | None = None
+
+
+class CommandBody(BaseModel):
+    text: str
 
 
 def _configure_logging() -> None:
@@ -147,6 +153,32 @@ def approval_callback(body: ApprovalCallback) -> dict:
     except ValueError:
         raise HTTPException(status_code=400, detail='agentId dan decision wajib diisi')
     return {'ok': True}
+
+
+def _request_approval(item_id: str) -> None:
+    """Raise one premium item's card; runs in a worker thread, never inline."""
+    from hermes_agents import premium
+
+    premium.request_approval(item_id)
+
+
+@app.post('/command')
+async def command(body: CommandBody) -> dict:
+    """The chat's business slash commands (`/design`, `/pending-items`, `/approve`).
+
+    Loopback-only and secret-free for the same reason `/approval-callback` is
+    (SECURITY.md §4.2): the caller is `server/biz-events.js` on this machine, and
+    the sidecar must never bind a non-loopback interface.
+
+    `/design` answers at once; the card that follows blocks, so it is raised in a
+    worker thread (`_request_approval`)."""
+    from . import commands
+
+    result = commands.handle_command(body.text)
+    if result.get('approval'):
+        _queue(asyncio.to_thread(_request_approval, str(result['approval'])))
+    return {'handled': bool(result.get('handled')), 'ok': bool(result.get('ok')),
+            'reply': str(result.get('reply') or '')}
 
 
 @app.post('/webhook')

@@ -292,6 +292,12 @@ Satu baris = satu item; revisi menulis status baru pada baris yang sama (bukan b
 `/pending-items` = `status='pending_approval'`; `/approve [id]` menulis `approved` lalu memicu
 Publisher. Approval dari permission card dan dari slash command menulis status yang sama.
 
+**Implementasi W7** (`hermes_agents/premium.py`): satu penulis `premium.decide()` untuk kedua pintu,
+`premium.publish()` idempoten (hanya dari `approved`, jadi keputusan kedua tidak menulis manifest
+kedua). Berkas per item: `media/premium/<id>/design-*.svg`, `preview-light.svg`,
+`preview-dark.svg`; yang live menulis manifest `media/published/premium/<id>.json` dengan
+`cdn.uploaded: false` dan alasannya — tidak ada upload CDN yang dipalsukan.
+
 ---
 
 ## 9. `kb_articles` + `kb_meta` — knowledge base

@@ -169,13 +169,32 @@ diteruskan ke Support; tiket lewat SLA memunculkan **satu** card dengan 3 opsi.
 
 ### W7 — Premium pipeline
 
-- DesignAgent → QAAgent → PricingAgent → PreviewAgent → ✋ approval → Publisher
-- `premium_items` + `/design`, `/pending-items`, `/approve`
+- [x] DesignAgent → QAAgent → PricingAgent → PreviewAgent → ✋ approval → Publisher
+  (`hermes_agents/premium.py`)
+- [x] `premium_items` + `/design`, `/pending-items`, `/approve` (`webhook_server/commands.py`, pintu
+  `POST /command` di sidecar, relay `server/biz-events.js` → `POST /chat`)
 
 **Deliverable:** satu item premium dari generate sampai `live` di toko.
 
 **Kriteria terima:** Reject menghentikan pipeline, Revisi mengulang dari DesignAgent, Approve
 men-deploy; approval dari card dan dari `/approve` menghasilkan status yang sama.
+
+**Status W7:** selesai, dan yang tidak dipalsukan tertulis di hasilnya:
+
+- **Desain dibuat di fork ini, bukan dipanggil dari model.** Tiga variasi SVG deterministik per item
+  dari palet tema; context mencatat `design_source: "template"` dan, kalau `IMAGE_GEN_API_KEY`
+  diisi, `image_gen: "belum diimplementasikan"`. AGENTS.md §4.5 yang lama ("berhenti di langkah
+  pertama tanpa key") tidak bisa diuji di CI, jadi diganti — bukan pura-pura memanggil model.
+- **QA tiga cek nyata** atas berkas yang ditulis: resolusi kanvas, warna di luar palet (tema tak
+  dikenal = gagal), dan latar penuh yang menutupi transparansi. Dua kali gagal → item `rejected`
+  dengan masalahnya di context.
+- **Satu penulis status approval:** `premium.decide()` dipakai tombol kartu (lewat
+  `request_approval` → `char.ask`) dan `/approve`; Approve langsung `publish()` (idempoten), Revisi
+  kembali ke DesignAgent (maks 3 ronde), Reject berhenti. `timeout` tidak mengubah apa pun, jadi
+  `/approve` masih bisa mengambilnya setelah kartu hilang.
+- **Publisher menulis manifest** `media/published/premium/<id>.json` dan menyatakan
+  `cdn.uploaded: false` beserta alasannya: fork ini tidak punya endpoint upload CDN yang
+  terdokumentasi, dan item tidak pernah mengaku sudah di-upload.
 
 ---
 

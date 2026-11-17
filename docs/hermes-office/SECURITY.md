@@ -62,6 +62,10 @@ Kalau butuh akses dari HP, pakai **phone mode base** (`npm run lan`) yang punya 
 - `POST /webhook` → header `X-Webhook-Secret` harus sama dengan `WEBHOOK_SECRET`.
 - `POST /approval-callback` → hanya dari `biz-events.js` (loopback). Tidak punya secret sendiri:
   keamanannya adalah binding loopback. Karena itu **sidecar tidak boleh bind non-loopback**, titik.
+- `POST /command` (W7) → slash command bisnis dari chat (`/design`, `/pending-items`, `/approve`),
+  juga tanpa secret sendiri dan dengan alasan yang sama: perelainya `server/biz-events.js` di mesin
+  yang sama. Isinya hanya tiga command itu (`webhook_server/commands.py`); baris lain dijawab
+  `handled: false` dan tidak melakukan apa pun.
 - `POST /webhook/payment` → signature SHA-512 Midtrans (lihat §5).
 - `GET /approval/{id}` → read-only, loopback.
 
