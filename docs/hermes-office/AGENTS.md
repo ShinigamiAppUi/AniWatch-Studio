@@ -5,6 +5,14 @@ Ruangan & id desk: [ROOMS.md](ROOMS.md). Handoff: [AGENT-HANDOFFS.md](AGENT-HAND
 
 **Total 45 agent** = 30 bisnis (5 generic + 25 AniWatch) + 15 specialist dev (12 base + 3 baru).
 
+Bentuk dokumen ini dua lapis:
+
+1. **Config** (§1) — yang ditulis ke kode. Nama, warna, emoji, ruangan, desk.
+2. **Kartu agent** (§3) — yang dibaca manusia saat mengerjakan satu agent: trigger, tools, output,
+   handoff, alur kerja, env yang dipakai.
+
+Indeks cepat §2 hanya untuk mencari; detailnya selalu di kartu.
+
 ---
 
 ## 1. Config kanonik (`src/types.ts`)
@@ -68,9 +76,9 @@ export const BUSINESS_AGENT_CONFIGS = {
 export type BusinessRole = keyof typeof BUSINESS_AGENT_CONFIGS
 ```
 
-Catatan Rev 3.1 atas versi Rev 3: `desk` sekarang menunjuk spot yang benar-benar ada di
-`rooms.ts` (lihat ROOMS.md), `room` memakai 4 ruangan baru, dan `QAAgent` memakai ✅ supaya tidak
-sama dengan `QualityChecker` 🔍 di UI.
+Catatan Rev 3.1 atas versi Rev 3: `desk` menunjuk spot yang benar-benar ada di `rooms.ts` (lihat
+ROOMS.md), `room` memakai 4 ruangan baru, dan `QAAgent` memakai ✅ supaya tidak sama dengan
+`QualityChecker` 🔍 di UI.
 
 ### Konflik nama yang harus dijaga
 
@@ -82,9 +90,55 @@ sama dengan `QualityChecker` 🔍 di UI.
 | `QAAgent` | premium (kualitas desain) | emoji ✅ |
 | `Reviewer` | dev specialist (`code-reviewer`) | bukan agent bisnis |
 
+Cara memanggil yang benar (nama tampilan bebas, **role key tidak**):
+
+```python
+bridge.agent_start("Scraper", "Scraper", task)                 # ✔
+bridge.agent_start("Quality Checker", "QualityChecker", task)  # ✔ nama beda, key benar
+bridge.agent_start("Scraper Agent", "scraper", task)           # ✘ key huruf kecil → tidak muncul
+bridge.agent_start("Security Agent", "Security", task)         # ✘ bentrok specialist dev
+```
+
 ---
 
-## 2. Kontrak setiap agent
+## 2. Indeks cepat (30 agent bisnis)
+
+| Role | Emoji | Rumah | Grup |
+| --- | --- | --- | --- |
+| Orchestrator | 🧠 | Business Suite | Koordinasi |
+| Sales | 💼 | Business Suite | Generic |
+| Marketing | 📣 | Business Suite | Generic |
+| Ops | ⚙️ | Business Suite | Generic |
+| Support | 🎧 | Main Office | Generic |
+| Scraper | 🕷️ | Server Room | Core Ops |
+| Metadata | 📋 | Server Room | Core Ops |
+| Encoder | 🔄 | Server Room | Core Ops |
+| Subtitle | 🌐 | Server Room | Core Ops |
+| TranslationAgent | 🌏 | Server Room | Core Ops |
+| QualityChecker | 🔍 | Server Room | Core Ops |
+| EpisodeScheduler | 📅 | Server Room | Core Ops |
+| Notifier | 🔔 | Server Room | Core Ops |
+| CacheWarmer | ⚡ | Server Room | Core Ops |
+| Moderator | 🛡️ | Main Office | Community |
+| UserReportAgent | 🚨 | Main Office | Community |
+| Analytics | 📊 | Creative Studio | Growth |
+| SEO | 🔎 | Creative Studio | Growth |
+| SocialMedia | 📱 | Creative Studio | Growth |
+| Recommendation | 🎯 | Creative Studio | Product |
+| Retention | 💌 | Creative Studio | Product |
+| DesignAgent | 🎨 | Creative Studio | Premium |
+| QAAgent | ✅ | Creative Studio | Premium |
+| PricingAgent | 💰 | Creative Studio | Premium |
+| PreviewAgent | 👁️ | Creative Studio | Premium |
+| Publisher | 🚀 | Creative Studio | Premium |
+| RevenueTracker | 💵 | Finance & Legal | Finance |
+| PaymentAgent | 💳 | Finance & Legal | Finance |
+| DMCA | ⚖️ | Finance & Legal | Legal |
+| SecOps | 🔐 | Finance & Legal | Security |
+
+---
+
+## 3. Kontrak setiap agent
 
 Semua agent bisnis adalah kelas dengan bentuk yang sama, supaya Orchestrator bisa memanggilnya
 tanpa tahu isinya:
@@ -115,19 +169,68 @@ Aturan:
 
 ---
 
-## 3. Generic business agents (5)
+## 4. Kartu agent
 
-| Role | Emoji | Tools | Trigger | Output |
-| --- | --- | --- | --- | --- |
-| **Orchestrator** | 🧠 | `delegate`, `monitor_agents`, `reprioritize`, `escalate_to_human` | semua trigger | koordinasi, satu baris "Delegasi ke X ✓" |
-| **Sales** 💼 | 💼 | `qualify_lead`, `draft_email`, `send_email`, `update_crm`, `schedule_meeting` | `new_lead`, `form_submit`, `deal_stage_change` | email terkirim, CRM updated, meeting di kalender |
-| **Marketing** 📣 | 📣 | `draft_post`, `schedule_post`, `fetch_analytics`, `generate_report` | `analytics_ready`, `content_schedule`, `weekly_analytics` | konten terpublish, weekly report |
-| **Support** 🎧 | 🎧 | `triage_ticket`, `search_kb`, `draft_reply`, `send_reply`, `escalate` | `support_ticket`, `new_email`, SLA breach | tiket resolved / dieskalasi |
-| **Ops** ⚙️ | ⚙️ | `check_system`, `run_workflow`, `generate_report`, `send_alert` | `chargeback_received`, error sistem, tiap jam | alert anomali, laporan sistem |
+### 4.1 Koordinasi & Generic (5)
 
-### Support — detail yang mudah salah
+#### 🧠 Orchestrator — Koordinasi
 
-Support adalah satu-satunya agent generic yang memakai knowledge base. Alurnya:
+**Key:** `Orchestrator` · **Rumah:** Business Suite · **Tools:** `delegate`, `monitor_agents`,
+`reprioritize`, `escalate_to_human`
+**Trigger:** semua webhook, semua job scheduler yang bersifat bisnis, chat manual
+**Output:** routing ke agent yang tepat, satu baris "Delegasi ke X ✓"
+
+```
+1. run_orchestrator(trigger_type, data) dari FastAPI / scheduler
+2. agent_start("Orchestrator", "Orchestrator", f"Route: {trigger_type}")
+3. build_orchestrator_graph().invoke() → node sesuai route_trigger()
+4. node agent berjalan (karakter kedua muncul di meja agent itu)
+5. agent_done() setelah node selesai — Orchestrator tidak ikut bekerja
+```
+
+**Handoff:** → agent sesuai routing table; → manusia kalau 2× eskalasi gagal.
+**Batas:** tidak boleh memanggil dirinya sendiri (re-entrant), tidak mengerjakan pekerjaan agent lain.
+**Routing table:** [API-REFERENCE.md](API-REFERENCE.md) §4 (`SUPPORTED_TRIGGERS`) + AGENT-HANDOFFS.md.
+
+#### 💼 Sales — Generic
+
+**Key:** `Sales` · **Rumah:** Business Suite · **Tools:** `qualify_lead`, `draft_email`,
+`send_email`, `update_crm`, `schedule_meeting`
+**Trigger:** `new_lead`, `form_submit`, `deal_stage_change` (via Orchestrator); `@sales` di chat
+**Output:** email terkirim, CRM updated, meeting di kalender
+**Handoff:** → Marketing (`lead_converted`: skor, nama, email) · → Support (`meeting_scheduled`:
+waktu, kebutuhan khusus)
+**Metric:** `leads_qualified`, `emails_sent`, `crm_updates`
+**Catatan:** email dan CRM adalah integrasi opsional — kalau `GOOGLE_*` / `HUBSPOT_API_KEY` kosong,
+agent berhenti dengan `agent_error` yang jelas, bukan diam.
+
+#### 📣 Marketing — Generic
+
+**Key:** `Marketing` · **Rumah:** Business Suite · **Tools:** `draft_post`, `schedule_post`,
+`fetch_analytics`, `generate_report`
+**Trigger:** `analytics_ready`, `content_schedule`; `weekly_analytics` (Senin 09.00)
+**Output:** konten terpublish, weekly report
+**Handoff:** → Support (`customer_onboarding`: plan, channel akuisisi)
+
+#### ⚙️ Ops — Generic
+
+**Key:** `Ops` · **Rumah:** Business Suite · **Tools:** `check_system`, `run_workflow`,
+`generate_report`, `send_alert`
+**Trigger:** `chargeback_received` (via Orchestrator); system check tiap jam (langsung, bukan lewat
+Orchestrator karena tidak menghasilkan karakter)
+**Output:** alert anomali, laporan sistem
+**Handoff:** → SecOps saat anomali berpola serangan; → manusia saat butuh keputusan infra
+
+#### 🎧 Support — Generic
+
+**Key:** `Support` · **Rumah:** Main Office · **Tools:** `triage_ticket`, `search_kb`,
+`draft_reply`, `send_reply`, `escalate`
+**Trigger:** `support_ticket`, `new_email`, SLA breach, `forward_to_support` dari UserReportAgent
+**Output:** tiket resolved atau dieskalasi
+**Handoff:** → Orchestrator (`ticket_unresolved`: alasan + 3 pesan terakhir)
+**Slash:** `/tickets`, `/sla`
+
+Alur dengan knowledge base:
 
 ```
 tiket masuk → triage (kategori + prioritas) → kb.search(subject, top_k=3)
@@ -137,31 +240,17 @@ tiket masuk → triage (kategori + prioritas) → kb.search(subject, top_k=3)
 
 - `KB_MIN_SCORE` (default `0.5`) **relatif** (FTS5 bm25), bukan probabilitas. Kalibrasi ulang
   setelah ≥ 20 artikel; jangan percaya angka default untuk produksi.
-- SLA: `received_at + 3600` (1 jam). `check_sla_breaches` (lihat SCHEDULER.md) menagih tiket lewat
-  deadline dengan permission card 3 pilihan: *Handle sekarang* / *Extend SLA +30 menit* /
-  *Close as resolved*.
-- Tiket disimpan di tabel `tickets` (DB-SCHEMA.md), context-nya di `SharedContext` key
-  `ticket:<id>`.
+- SLA: `received_at + 3600` (1 jam). `check_sla_breaches` menagih tiket lewat deadline dengan
+  permission card 3 pilihan: *Handle sekarang* / *Extend SLA +30 menit* / *Close as resolved*.
+- ⚠️ `wait_for_approval` hanya dipanggil **setelah** card dikirim, dan hanya **sekali** per tiket
+  (fix Rev 3 #1 — versi lama memanggilnya dua kali dan agent menggantung).
+- Tiket disimpan di tabel `tickets` (DB-SCHEMA.md), context-nya key `ticket:<id>`.
 
 ---
 
-## 4. AniWatch agents (25)
+### 4.2 Core Ops — Server Room (9)
 
-### 4.1 Core Ops — Server Room, 9 agent
-
-| Role | Emoji | Tools | Trigger | Output |
-| --- | --- | --- | --- | --- |
-| **Scraper** 🕷️ | 🕷️ | `fetch_source`, `save_episode`, `check_duplicate` | tiap N menit, episode baru | episode baru di DB (belum live) |
-| **Metadata** 📋 | 📋 | `fetch_mal`, `fetch_anilist`, `update_db` | setelah Scraper | judul, synopsis, thumbnail, genre, rating |
-| **Encoder** 🔄 | 🔄 | `encode_video`, `generate_thumbnail`, `upload_cdn` | file baru masuk | 360p/720p/1080p + thumbnail di CDN |
-| **Subtitle** 🌐 | 🌐 | `fetch_subtitle`, `sync_timing`, `detect_encoding` | setelah Encoder | subtitle tersinkron |
-| **TranslationAgent** 🌏 | 🌏 | `fetch_raw_subtitle`, `translate_text`, `qa_translation`, `save_translated_sub`, `request_human_review` | setelah Subtitle | sub terjemahan siap attach, atau eskalasi QA |
-| **QualityChecker** 🔍 | 🔍 | `check_stream`, `check_subtitle_sync`, `verify_404` | setelah TranslationAgent | report kualitas (lolos / corrupt) |
-| **EpisodeScheduler** 📅 | 📅 | `queue_episode`, `check_embargo`, `trigger_publish`, `cancel_schedule` | setelah QC lolos | episode go live tepat waktu, embargo terjaga |
-| **Notifier** 🔔 | 🔔 | `push_notif`, `update_rss`, `update_feed` | episode live | subscriber & RSS terupdate |
-| **CacheWarmer** ⚡ | ⚡ | `get_trending`, `warm_cdn_cache` | harian 17.00 | CDN hangat sebelum prime time |
-
-**Pipeline episode (sequential, dijaga Orchestrator):**
+Pipeline episode bersifat sequential dan dijaga Orchestrator:
 
 ```
 Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityChecker
@@ -169,71 +258,238 @@ Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityCh
         → Notifier + SocialMedia
 ```
 
-Kegagalan yang sudah dirancang:
+#### 🕷️ Scraper
 
-| Kejadian | Tindakan |
-| --- | --- |
-| QC menemukan video corrupt | Orchestrator batalkan pipeline; Scraper coba source alternatif |
-| 2x gagal source alternatif | escalate ke manusia ✋ |
-| QA terjemahan < `TRANSLATION_QA_THRESHOLD` | permission card: Approve & Lanjutkan / Reject & Translate Ulang |
-| DMCA masuk sebelum embargo | `cancel_schedule()` → episode tidak pernah live |
+**Key:** `Scraper` · **Tools:** `fetch_source`, `save_episode`, `check_duplicate`
+**Trigger:** tiap N menit, episode baru rilis, retry dari QualityChecker
+**Output:** episode tersimpan di DB (belum live)
+**Handoff:** → Metadata (`episode_fetched`: episode_id, source)
+**Catatan:** `check_duplicate` wajib sebelum `save_episode` — episode ganda merusak antrian embargo.
 
-### 4.2 Community — Main Office, 2 agent (+ Support dari generic)
+#### 📋 Metadata
 
-| Role | Emoji | Tools | Trigger | Output |
-| --- | --- | --- | --- | --- |
-| **Moderator** 🛡️ | 🛡️ | `filter_comment`, `flag_content`, `ban_account` | komentar/report masuk | komentar bersih, akun di-ban |
-| **UserReportAgent** 🚨 | 🚨 | `triage_report`, `check_episode_health`, `trigger_qc_pipeline`, `forward_to_support`, `notify_user`, `log_report` | tombol "Laporkan Masalah" | report terklasifikasi, QC di-trigger, user dinotif |
+**Key:** `Metadata` · **Tools:** `fetch_mal`, `fetch_anilist`, `update_db`
+**Trigger:** setelah Scraper · **Output:** judul, synopsis, thumbnail, genre, rating
+**Handoff:** → Encoder
 
-`UserReportAgent` adalah lapisan triage: Support tidak lagi menerima "video rusak". Routing-nya:
+#### 🔄 Encoder
+
+**Key:** `Encoder` · **Tools:** `encode_video`, `generate_thumbnail`, `upload_cdn`
+**Trigger:** file baru dari Metadata · **Output:** 360p/720p/1080p + thumbnail di CDN
+**Handoff:** → Subtitle
+**Env:** `CDN_API_KEY`, `CDN_BASE_URL`
+
+#### 🌐 Subtitle
+
+**Key:** `Subtitle` · **Tools:** `fetch_subtitle`, `sync_timing`, `detect_encoding`
+**Trigger:** setelah Encoder · **Output:** subtitle tersinkron, encoding diperbaiki
+**Handoff:** → TranslationAgent
+**Batas:** hanya timing & encoding. Terjemahan bukan tugasnya.
+
+#### 🌏 TranslationAgent
+
+**Key:** `TranslationAgent` · **Tools:** `fetch_raw_subtitle`, `translate_text`, `qa_translation`,
+`save_translated_sub`, `request_human_review`
+**Trigger:** setelah Subtitle · **Output:** sub terjemahan siap attach, atau eskalasi QA
+**Handoff:** → QualityChecker (selesai) · → manusia (QA di bawah threshold)
+**Slash:** `/translations`, `/approve-sub [episode_id]`
+
+```
+1. fetch_raw_subtitle(episode_id)                     .srt/.ass dari Subtitle
+2. translate_text(raw, provider=TRANSLATION_PROVIDER) deepl | openai | local (Hermes)
+3. qa_translation(original, translated) → skor 0..1
+4. skor < TRANSLATION_QA_THRESHOLD (0.75):
+     agent_waiting → options ["Approve & Lanjutkan", "Reject & Translate Ulang"]
+     wait_for_approval(timeout=3600); selain "Approve" → agent_error, return "rejected"
+5. save_translated_sub() → subtitle_tracks status ready
+6. agent_done() → QualityChecker
+```
+
+**Env:** `TRANSLATION_PROVIDER`, `DEEPL_API_KEY`, `TRANSLATION_QA_THRESHOLD`
+
+#### 🔍 QualityChecker
+
+**Key:** `QualityChecker` · **Tools:** `check_stream`, `check_subtitle_sync`, `verify_404`
+**Trigger:** setelah TranslationAgent; re-check dari UserReportAgent
+**Output:** report kualitas (lolos / corrupt) — semua subtitle track diperiksa
+**Handoff:** → EpisodeScheduler (lolos) · → Orchestrator (`qc_failed`: jenis kerusakan, attempt)
+**Aturan:** dua kali gagal pada episode yang sama → pipeline dibatalkan, eskalasi ke manusia.
+
+#### 📅 EpisodeScheduler
+
+**Key:** `EpisodeScheduler` · **Tools:** `queue_episode`, `check_embargo`, `trigger_publish`,
+`cancel_schedule`
+**Trigger:** setelah QC lolos; satu putaran tiap menit dari scheduler
+**Output:** episode live tepat waktu, embargo terjaga
+**Handoff:** → Orchestrator (`episode_released`) → Notifier + SocialMedia
+**Slash:** `/schedule`, `/embargo [episode_id]`, `/cancel-schedule [episode_id]`
+
+```
+1. QC memanggil schedule_episode(..., embargo_until)  → status "scheduled"
+2. tiap menit: SELECT ... WHERE embargo_until <= now AND status='scheduled'
+3. publish atomik: UPDATE ... SET status='live' WHERE episode_id=? AND status='scheduled'
+   changes == 0 → sudah dibatalkan DMCA, jangan publish
+4. run_orchestrator("episode_released", {...}) → Notifier + SocialMedia
+5. DMCA sebelum embargo: cancel_schedule() → "cancelled", tidak pernah live
+   DMCA setelah live: unpublish + purge_cdn
+```
+
+**Schema:** `episode_schedule` (DB-SCHEMA.md §5). `embargo_until` dalam **detik** epoch
+(`time.time()`), bukan milidetik.
+
+#### 🔔 Notifier
+
+**Key:** `Notifier` · **Tools:** `push_notif`, `update_rss`, `update_feed`
+**Trigger:** episode live · **Output:** subscriber dinotif, RSS/feed terupdate
+**Handoff:** → SocialMedia (`announce_episode`)
+
+#### ⚡ CacheWarmer
+
+**Key:** `CacheWarmer` · **Tools:** `get_trending`, `warm_cdn_cache`
+**Trigger:** harian 17.00 (langsung dari scheduler) · **Output:** CDN hangat sebelum prime time
+**Batas:** tidak mem-publish apa pun; hanya cache.
+
+---
+
+### 4.3 Community — Main Office (2 + Support)
+
+#### 🛡️ Moderator
+
+**Key:** `Moderator` · **Tools:** `filter_comment`, `flag_content`, `ban_account`
+**Trigger:** komentar/report masuk · **Output:** komentar bersih, akun di-ban
+**Slash:** `/unban [ip/user]`
+**Aturan:** `ban_account` harus menyimpan alasan + `rule` yang dilanggar (audit, SECURITY.md §10).
+
+#### 🚨 UserReportAgent
+
+**Key:** `UserReportAgent` · **Tools:** `triage_report`, `check_episode_health`,
+`trigger_qc_pipeline`, `forward_to_support`, `notify_user`, `log_report`
+**Trigger:** `user_report` (tombol "Laporkan Masalah") · **Output:** report terklasifikasi, QC
+di-trigger, user dinotif
+**Handoff:** → QualityChecker (teknis) · → Support (akun/billing)
+**Slash:** `/reports`, `/report-stats`
 
 ```
 laporan → triage_report
   ├── technical (video/subtitle/404) → check_episode_health
-  │      ├── bermasalah → trigger_qc_pipeline → notify_user
-  │      └── normal     → notify_user ("coba clear cache")
+  │      ├── bermasalah → trigger_qc_pipeline → notify_user("sedang diperbaiki")
+  │      └── normal     → notify_user("coba clear cache")
   ├── account/billing → forward_to_support → Support 🎧
   └── spam/duplikat   → log_report → selesai
 ```
 
-### 4.3 Growth — Creative Studio, 5 agent
+**Schema:** `user_reports` (DB-SCHEMA.md §4).
 
-| Role | Emoji | Tools | Trigger | Output |
-| --- | --- | --- | --- | --- |
-| **Analytics** 📊 | 📊 | `fetch_watch_data`, `detect_dropoff`, `generate_report` | harian/mingguan | trending + dropoff per episode |
-| **SEO** 🔎 | 🔎 | `update_meta`, `update_sitemap`, `add_structured_data` | anime baru ditambah | meta, sitemap, structured data |
-| **SocialMedia** 📱 | 📱 | `post_discord`, `post_twitter`, `post_instagram`, `post_telegram` | `announce_episode` | pengumuman terkirim |
-| **Recommendation** 🎯 | 🎯 | `fetch_history`, `run_model`, `save_recs` | Minggu 22.00 | rekomendasi personal |
-| **Retention** 💌 | 💌 | `segment_users`, `draft_email`, `send_campaign` | `retention_check` | campaign re-engagement |
+---
 
-### 4.4 Premium pipeline — Creative Studio, 5 agent
+### 4.4 Growth & Product — Creative Studio (5)
 
-| Role | Emoji | Tools | Output |
+#### 📊 Analytics
+
+**Key:** `Analytics` · **Tools:** `fetch_watch_data`, `detect_dropoff`, `generate_report`
+**Trigger:** `weekly_analytics` (Senin), `analytics_ready` · **Output:** trending, watch time,
+drop-off per episode
+
+#### 🔎 SEO
+
+**Key:** `SEO` · **Tools:** `update_meta`, `update_sitemap`, `add_structured_data`
+**Trigger:** anime baru ditambah ke DB · **Output:** meta, sitemap, structured data
+
+#### 📱 SocialMedia
+
+**Key:** `SocialMedia` · **Tools:** `post_discord`, `post_twitter`, `post_instagram`,
+`post_telegram`
+**Trigger:** `announce_episode` setelah episode live · **Output:** pengumuman ke semua platform
+**Catatan:** tiap platform opsional; yang token-nya kosong dilewati, bukan menggagalkan agent.
+
+#### 🎯 Recommendation
+
+**Key:** `Recommendation` · **Tools:** `fetch_history`, `run_model`, `save_recs`
+**Trigger:** batch Minggu 22.00 (langsung dari scheduler) · **Output:** rekomendasi personal
+**Catatan:** menulis ke DB AniWatch (di luar fork); kantor hanya memantulkan karakternya.
+
+#### 💌 Retention
+
+**Key:** `Retention` · **Tools:** `segment_users`, `draft_email`, `send_campaign`
+**Trigger:** `retention_check` · **Output:** campaign re-engagement terkirim
+
+---
+
+### 4.5 Premium pipeline — Creative Studio (5)
+
+```
+DesignAgent 🎨 3–5 variasi → QAAgent ✅ filter → PricingAgent 💰 tier
+  → PreviewAgent 👁️ mockup light+dark → ✋ approval (Approve/Revisi/Reject)
+        ├── Approve → Publisher 🚀 live
+        ├── Revisi  → DesignAgent 🎨 ulang
+        └── Reject  → selesai
+```
+
+| Agent | Key | Tools | Output |
 | --- | --- | --- | --- |
-| **DesignAgent** 🎨 | 🎨 | `generate_design`, `save_draft` | 3–5 variasi (border/nameplate/effect) |
-| **QAAgent** ✅ | ✅ | `check_resolution`, `check_consistency`, `check_transparency` | desain lolos QA saja |
-| **PricingAgent** 💰 | 💰 | `analyze_complexity`, `assign_tier` | tier harga |
-| **PreviewAgent** 👁️ | 👁️ | `render_mockup`, `bundle_preview` | mockup light + dark |
-| **Publisher** 🚀 | 🚀 | `upload_cdn`, `insert_db`, `activate_item` | item live di toko |
+| 🎨 DesignAgent | `DesignAgent` | `generate_design`, `save_draft` | 3–5 variasi (border/nameplate/effect) |
+| ✅ QAAgent | `QAAgent` | `check_resolution`, `check_consistency`, `check_transparency` | desain yang lolos filter |
+| 💰 PricingAgent | `PricingAgent` | `analyze_complexity`, `assign_tier` | tier harga |
+| 👁️ PreviewAgent | `PreviewAgent` | `render_mockup`, `bundle_preview` | mockup light + dark |
+| 🚀 Publisher | `Publisher` | `upload_cdn`, `insert_db`, `activate_item` | item live di toko |
 
-Alur dengan **approval gate** di tengah (satu-satunya jalur yang wajib manusia):
+Detail per agent:
 
-```
-trigger → DesignAgent → QAAgent → PricingAgent → PreviewAgent
-                                    → ✋ approval (Approve / Revisi / Reject)
-Approve → Publisher (live)   Revisi → DesignAgent (ulang)   Reject → selesai
-```
+- **DesignAgent** — trigger jadwal mingguan atau `/design [type] [tema]`; env `IMAGE_GEN_API_KEY`,
+  `IMAGE_GEN_PROVIDER` (`dalle` | `stability`). Kalau key kosong, berhenti di langkah pertama.
+- **QAAgent** — hanya meneruskan yang lolos; yang gagal dikembalikan ke DesignAgent, bukan dibuang.
+- **PricingAgent** — angka tier dari `analyze_complexity`, bukan perkiraan LLM bebas.
+- **PreviewAgent** — hasilnya yang dilihat CEO; `/pending-items` menampilkan status
+  `pending_approval`.
+- **Publisher** — hanya jalan setelah approval. `/approve [id]` menulis status yang sama dengan
+  tombol di card. Handoff → RevenueTracker saat item terjual.
 
-### 4.5 Finance, Legal, Security — Finance & Legal, 4 agent
+---
 
-| Role | Emoji | Tools | Trigger | Output |
-| --- | --- | --- | --- | --- |
-| **RevenueTracker** 💵 | 💵 | `record_transaction`, `generate_snapshot`, `detect_anomaly` | payment sukses, harian | laporan revenue |
-| **PaymentAgent** 💳 | 💳 | `handle_success`, `handle_failure`, `retry_subscription`, `process_refund`, `flag_chargeback` | `/webhook/payment` | kegagalan bayar tertangani, subscription terjaga |
-| **DMCA** ⚖️ | ⚖️ | `verify_request`, `unpublish_episode`, `purge_cdn` | email/legal | takedown + schedule dibatalkan |
-| **SecOps** 🔐 | 🔐 | `monitor_events`, `apply_rule`, `escalate` | loop 10 dtk | ancaman terdeteksi + diblokir |
+### 4.6 Finance, Legal, Security — Finance & Legal (4)
 
-Aturan SecOps (semua ambang, satu tabel):
+#### 💵 RevenueTracker
+
+**Key:** `RevenueTracker` · **Tools:** `record_transaction`, `generate_snapshot`, `detect_anomaly`
+**Trigger:** payment sukses (dipanggil PaymentAgent), harian
+**Output:** laporan revenue harian/mingguan, alert anomali
+**Slash:** `/revenue`, `/topselling`
+
+#### 💳 PaymentAgent
+
+**Key:** `PaymentAgent` · **Tools:** `handle_success`, `handle_failure`, `retry_subscription`,
+`process_refund`, `flag_chargeback`
+**Trigger:** Midtrans → `/webhook/payment` (setelah signature terverifikasi)
+**Output:** kegagalan bayar tertangani, grace period diset, refund diproses, chargeback dieskalasi
+**Handoff:** → RevenueTracker (sukses) · → SecOps (chargeback) · → manusia (approval refund)
+**Slash:** `/payments`, `/subscriptions`, `/refunds`, `/chargeback`
+
+| Event Midtrans | Aksi |
+| --- | --- |
+| `payment.success` | status order sukses → RevenueTracker; metric `emails_sent` tidak, `refunds_processed` tidak |
+| `payment.failed` | status gagal, notif user + saran metode alternatif |
+| `subscription.renewal_failed` | retry < 2 → grace 3 hari + notif; retry ≥ 2 → downgrade `free` + metric `subscriptions_lost` |
+| `refund.requested` | window 7 hari; valid → approval card (Approve/Tolak/Minta Info), timeout **24 jam** |
+| `chargeback.received` | revoke item, status `chargeback`, trigger `chargeback_received` → Ops + SecOps, metric `chargebacks` |
+
+**Schema:** `payment_events`, `subscription_status` (DB-SCHEMA.md §7). Idempoten: `INSERT OR IGNORE`
+atas `payment_events.id` — notifikasi ganda tidak boleh menghasilkan refund ganda.
+
+#### ⚖️ DMCA
+
+**Key:** `DMCA` · **Tools:** `verify_request`, `unpublish_episode`, `purge_cdn`
+**Trigger:** takedown request masuk · **Output:** episode unpublish + CDN purge, atau
+`cancel_schedule` kalau belum live
+**Handoff:** → EpisodeScheduler (`takedown`: episode_id/anime_id, rentang)
+**Aturan:** bukti permintaan tidak pernah dihapus, hanya status yang berubah.
+
+#### 🔐 SecOps
+
+**Key:** `SecOps` · **Tools:** `monitor_events`, `apply_rule`, `escalate`
+**Trigger:** loop monitor 10 detik; dipanggil Ops saat chargeback
+**Output:** ancaman terdeteksi + diblokir (ban IP, soft lock, rate limit, flag account)
+**Handoff:** → manusia lewat permission card untuk eskalasi
+**Slash:** `/security`, `/incidents`
 
 | Rule | Threshold | Window | Aksi |
 | --- | --- | --- | --- |
@@ -242,15 +498,14 @@ Aturan SecOps (semua ambang, satu tabel):
 | `request_rate` | 120 | 60 dtk | `rate_limit` |
 | `chargeback_count` | 2 | — | `flag_account` |
 
-PaymentAgent punya aturan sendiri (grace period, retry, refund window) — lihat
-[DECISIONS.md](DECISIONS.md) §ADR-6 untuk alasan angkanya, dan [DB-SCHEMA.md](DB-SCHEMA.md)
-untuk tabel `payment_events` + `subscription_status`.
+**Aturan event:** `agent_working` hanya dikirim saat **ada** pelanggaran. Loop 10 detik yang
+mengirim event tiap putaran akan membanjiri kantor (PLAN.md §Risiko).
 
 ---
 
 ## 5. Tim dev — 15 specialist
 
-12 dari base + 3 baru untuk AniWatch. Ini **bukan** agent LangGraph: mereka dipanggil oleh chat
+12 dari base + 3 baru untuk AniWatch. Ini **bukan** agent LangGraph: mereka dipanggil dari chat
 routing dan bekerja lewat Claude Code, jadi tidak punya config `BUSINESS_AGENT_CONFIGS`.
 
 | # | Key (`AGENT_CONFIGS`) | Tampilan | Fokus |
@@ -271,13 +526,19 @@ routing dan bekerja lewat Claude Code, jadi tidak punya config `BUSINESS_AGENT_C
 | 14 | `stream-dev` **(baru)** | Stream Dev | CDN, encoding, latency, ffmpeg |
 | 15 | `mobile-dev` **(baru)** | Mobile Dev | iOS/Android, push notif, offline |
 
-Routing chat (tambahan di `server/index.js`, pola sama dengan `AGENT_CONFIGS` base):
+Routing di base terjadi lewat **mention** di chat (`@Debugger lihat ini`), bukan kata kunci otomatis
+(`server/index.js` hanya menghitung mention kalau agent itu ada di kantor). Jadi tiga specialist baru
+butuh dua hal: entri di `AGENT_CONFIGS` (`src/types.ts`) dan bisa dipanggil dengan namanya.
+
+Kalau nanti mau routing otomatis berbasis kata kunci, itu fitur baru di `server/index.js` — belum
+ada di base, dan bukan bagian W2. Usulan katanya:
 
 ```js
-const ANIWATCH_ROUTING = {
-  'player, hls, buffering, kualitas, adaptive, m3u8': 'Player Dev',
-  'cdn, encoding, latency, bandwidth, stream, ffmpeg': 'Stream Dev',
-  'ios, android, mobile app, react native, flutter':  'Mobile Dev',
+// USULAN, belum ada di base — jangan ditulis ke kode sebelum fiturnya dibangun
+const ANIWATCH_KEYWORDS = {
+  'player, hls, buffering, adaptive, m3u8': 'Player Dev',
+  'cdn, encoding, latency, bandwidth, ffmpeg': 'Stream Dev',
+  'ios, android, mobile app, react native, flutter': 'Mobile Dev',
 }
 ```
 
@@ -287,14 +548,14 @@ const ANIWATCH_ROUTING = {
 
 1. Tentukan **ruangan + desk** kosong di [ROOMS.md](ROOMS.md) (kalau tidak ada, tambah spot dulu).
 2. Tambah entri di `BUSINESS_AGENT_CONFIGS` — key = role string, warna unik, emoji belum dipakai.
-3. Buat `hermes_bridge/agents/<nama>.py` dengan kontrak §2.
+3. Buat `hermes_bridge/agents/<nama>.py` dengan kontrak §3.
 4. Daftarkan tools-nya di deskripsi agent (string tool **harus** sama dengan yang dipanggil).
 5. Kalau agent bisa dipicu trigger: tambah ke `route_trigger()` **dan** `SUPPORTED_TRIGGERS`
    (API-REFERENCE.md). Dua tempat; lupa salah satu = trigger ditolak 400.
 6. Kalau agent memegang approval: tambah timeout yang masuk akal (jangan warisi 300 dtk untuk
    keputusan uang).
 7. Uji: `python -m hermes_bridge.smoke --role <Role>` — karakter harus muncul di meja yang benar.
-8. Tambah barisnya ke tabel di dokumen ini.
+8. Tambah barisnya ke indeks §2 **dan** kartunya di §4.
 
 Yang **tidak** perlu diubah saat menambah agent: `server/index.js`, `validateEvent`,
 `officeReducer`, komponen UI. Kalau salah satu terasa perlu, desainnya salah.
