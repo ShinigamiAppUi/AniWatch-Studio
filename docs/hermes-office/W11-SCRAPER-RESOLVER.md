@@ -56,6 +56,35 @@ AniWatch backend (Go, selalu jalan)          Hermes office (Python + kantor)
 Kalau kantor mati, backend tetap memanen dan memeriksa health sendiri. Kalau backend mati, role
 melaporkan "tidak terjangkau", bukan angka palsu.
 
+### 2.1 Empat istilah yang mudah tertukar
+
+`Resolver`, `PageResolver`, `LinkResolver`, dan host `direct` sering dianggap satu hal karena
+keempatnya berujung pada "URL putar". Mereka bukan sinonim: bedanya ada di bahan masuk, bahan
+keluar, dan di lapis mana masing-masing berada.
+
+| Istilah | Apa itu | Bahan masuk | Bahan keluar | Di mana |
+| --- | --- | --- | --- | --- |
+| **Resolver** | Nama lapis **dan** role kantor (🔗 `biz-s10`) — bukan satu fungsi dan bukan satu host | — | laporan host mati, antrean `need_direct` yang selesai | §5.1, §5.3 |
+| **`PageResolver`** | Registry adapter **halaman episode**: `CanHandle(rawURL)`, `Candidates(pageURL)` | `source_page_url` sebuah halaman episode | daftar kandidat mentah (embed/iframe) — **belum** URL putar | `internal/pageresolve/` (§4.3) |
+| **`LinkResolver`** | Registry adapter **host media** (~104 host, sejajar tabel `media_hosts`) | kandidat / URL host | URL putar + hasil probe (mime, `playable`) | `internal/media/` (§4.4) |
+| **host `direct`** | **Satu adapter** di dalam `LinkResolver`, bukan lapis tersendiri | URL yang **sudah** berupa file langsung, dicek ke allowlist `MEDIA_DIRECT_HOSTS` | URL yang sama setelah probe; atau ditolak / `host_not_supported` | `internal/media/direct.go` |
+
+Urutannya: `source_page_url` → **PageResolver** → kandidat → **LinkResolver** (salah satu
+adapter-nya bisa `direct`) → URL putar. Dua jalan pintas yang sah: kalau `sumber` sudah punya
+adapter, `PageResolver` dilewati karena adapter itulah yang mengekstrak embed; kalau URL-nya memang
+sudah URL host langsung, `PageResolver` juga dilewati dan `LinkResolver` langsung memilih `direct`.
+
+Yang **tidak** boleh disimpulkan dari tabel ini:
+
+- "Resolver = host `direct`". `direct` hanya kasus paling sederhana (tanpa ekstraksi) dari ~104 host;
+  pixeldrain, HLS, dan host embed tetap butuh adapter masing-masing.
+- "PageResolver boleh dipakai untuk semua sumber". Ia hanya dipakai bila sumber **tidak** punya
+  adapter (§4.3); satu halaman tidak boleh punya dua parser dengan hasil berbeda.
+- "Resolver menyimpan URL putar". Tidak ada kolom `direct_url`. Yang disimpan `provider` +
+  `source_page_url`; URL putar lahir ulang saat playback (cache 5 menit) dan berumur pendek (§1).
+- "Host tanpa adapter = gagal". Barisnya tetap boleh disimpan; ia hanya dilewati plan dengan alasan
+  `host_not_supported`, dan alasan itu wajib muncul di laporan Resolver, bukan hilang (§4.4).
+
 ---
 
 ## 3. Kontrak tulis: satu field satu penulis
@@ -120,6 +149,8 @@ Catatan ini tidak menyimpan status episode — itu milik backend.
 
 ### 4.3 `internal/pageresolve/` (baru, D-64)
 
+Lapis pertama dari dua lapis resolve (§2.1): halaman → kandidat, tanpa menyentuh host.
+
 - `PageResolver`: `Slug()`, `DisplayName()`, `CanHandle(rawURL)`, `Candidates(ctx, pageURL) []Candidate`
   — halaman episode → daftar kandidat (embed/iframe) **tanpa** resolve host. Registry-nya sejajar
   dengan `media.Registry` (LinkResolver), bukan di dalamnya.
@@ -129,6 +160,9 @@ Catatan ini tidak menyimpan status episode — itu milik backend.
 - Dipakai `Scanner`/`Runner` saat lapis `scrape` tidak tersedia tetapi `source_page_url` diketahui.
 
 ### 4.4 Resolver host (`internal/media`)
+
+Lapis kedua (§2.1): kandidat → URL putar. `direct` adalah salah satu adapter di sini, bukan nama
+lapis dan bukan nama role.
 
 - Registry sudah benar (`LinkResolver`, `CanHandle` tanpa network, `ForURL` deterministik) — **jangan
   dirombak**. Yang ditambah hanya adapter, satu per gelombang, tiap adapter wajib: fixture respons
