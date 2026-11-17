@@ -91,7 +91,7 @@ async def lifespan(_app: FastAPI):
         shutdown_scheduler()
 
 
-app = FastAPI(title='Hermes Office sidecar', version='0.3.0', lifespan=lifespan)
+app = FastAPI(title='Hermes Office sidecar', version='0.5.0', lifespan=lifespan)
 
 
 def _business_db():

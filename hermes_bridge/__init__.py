@@ -11,4 +11,4 @@ agent; `httpx` is for the calls to the office server. `env.py` is the one
 
 __all__ = ['bridge', 'env', 'queue', 'shared_context', 'db', 'smoke']
 
-__version__ = '0.2.0'
+__version__ = '0.5.0'

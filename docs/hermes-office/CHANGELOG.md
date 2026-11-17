@@ -1,5 +1,13 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 3.4a — 17 Nov 2026 (rilis pertama)
+
+Dokumen ini mencatat revisi; rilisnya diberi tag. Rilis pertama: **v0.5.0** (W1–W5 selesai) —
+catatan rilis yang bisa dibaca orang luar ada di [RELEASES.md](RELEASES.md). Versi `0.x` = versi
+lapisan Hermes (bridge, sidecar, agent); `package.json` 1.2.0 tetap versi aplikasi kantor.
+
+---
+
 ## Rev 3.4 — 17 Nov 2026 (kanal keluar Support)
 
 ### Ditambahkan
