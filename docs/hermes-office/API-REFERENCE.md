@@ -335,8 +335,8 @@ sesudahnya.
 { "type": "biz_metric_update", "metrics": { "today": { "leads_qualified": 12 }, "sla": { "breach_count": 1 }, "agents_active": ["Support"], "last_updated": "2026-11-16T09:41:00.000Z" } }
 ```
 
-**Efek visual:** angka di `BizMetricsPanel` berubah; baris SLA berkedip kalau `breach_count > 0`.
-Bukan animasi karakter.
+**Efek visual:** angka di `BizMetricsPanel` (tombol **biz**) berubah; baris **SLA breaches** dan
+**Chargebacks** berwarna merah kalau nilainya bukan 0. Bukan animasi karakter.
 
 **Dipanggil oleh:** `POST /biz-metrics` (server yang membroadcast, bukan bridge).
 
@@ -344,11 +344,11 @@ Bukan animasi karakter.
 
 ## 4. FastAPI sidecar (8765)
 
-**Sudah ada di W2** (`webhook_server/main.py`, `approval.py`): `GET /health`,
+**Sudah ada di kode** (`webhook_server/main.py`, `approval.py`): `GET /health`,
 `GET /approval/{agent_id}` (one-shot `pop`), `POST /approval-callback` (`{agentId, decision}` → 400
-kalau kosong). Tiga route di bawah ini **W3–W5**, belum ada di kode.
+kalau kosong). `/webhook` dan `/webhook/payment` ada sejak W4 (`triggers.py`, `payments.py`).
 
-### `POST /webhook` (W4 — belum ada)
+### `POST /webhook` (W4)
 
 Header wajib `X-Webhook-Secret`. Body:
 
@@ -362,8 +362,10 @@ Header wajib `X-Webhook-Secret`. Body:
 `support_ticket`, `new_email`, `episode_released`, `weekly_analytics`, `announce_episode`,
 `retention_check`, `chargeback_received`, `user_report`.
 
-Selalu dijawab `{"status":"queued"}` setelah `asyncio.create_task(run_orchestrator_async(...))` —
-semua trigger lewat Orchestrator (fix Rev 3 #4).
+Selalu dijawab `{"status":"queued"}` setelah trigger diserahkan ke worker thread
+(`triggers.run_trigger`: Orchestrator muncul lebih dulu, lalu role tujuannya) — semua trigger lewat
+Orchestrator (fix Rev 3 #4). Type yang tidak terpetakan → 400, **tidak pernah** dialihkan ke `ops`.
+Sidecar menolak start kalau `WEBHOOK_SECRET` kosong.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8765/webhook \
@@ -381,7 +383,7 @@ Dipakai `wait_for_approval` (poll 3 dtk). `{"decision": null}` selama belum ada,
 
 Body `{agentId, decision}`. Dipanggil `biz-events.js`. 400 kalau salah satu kosong.
 
-### `POST /webhook/payment` (W5 — belum ada)
+### `POST /webhook/payment` (W4 — verifikasi + catat; agent PaymentAgent W9)
 
 Notifikasi Midtrans. Header `X-Signature-Key` harus sama dengan
 `sha512(order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY)` (explicit `utf-8`,
@@ -389,7 +391,16 @@ Notifikasi Midtrans. Header `X-Signature-Key` harus sama dengan
 
 ### `GET /health`
 
-`{"status":"ok","pending_approvals":n}`. Tidak menyentuh office.
+`{"status":"ok","pending_approvals":n,"jobs":[{id,next_run_time}],"pending_jobs":[{id,reason}],"mail":{...}}`.
+Tidak menyentuh office. `pending_approvals` menghitung **keputusan yang belum diambil**, bukan kartu
+yang sedang terbuka: sidecar baru tahu tentang kartu saat tombolnya ditekan. `jobs` kosong kalau
+scheduler belum jalan (mis. app di-import tanpa lifespan), dan `pending_jobs` adalah job
+SCHEDULER.md yang menunggu agent W6–W9.
+
+`mail` adalah kanal keluar Support: `{"configured": bool, "last": {at, to, sent, error} | null}`.
+`configured` false berarti `SMTP_HOST` kosong, jadi setiap balasan Support **gagal** dengan alasan
+`SMTP belum dikonfigurasi` dan tiketnya tetap `open` (ENV-VARS.md §3b). `last` adalah percobaan
+terakhir, berhasil atau tidak — cara tercepat menjawab "kenapa tiket itu tidak dibalas".
 
 ---
 

@@ -344,6 +344,10 @@ const ID = '[^/]{1,200}'
  *                            read when the socket opens
  *   GET  /recap              the "today" popover's counts        open
  *                            (numbers only, no text)
+ *   GET  /biz-metrics        the "biz" popover's counters:      open
+ *                            leads, emails, tickets, SLA, and
+ *                            who is working (numbers and role
+ *                            names, no text)
  *   GET  /settings           the settings panel's three server   open
  *                            switches as they are now
  *   POST /settings           change them (prompt logging,        UI token
@@ -382,6 +386,7 @@ export const LAN_FULL_ROUTES = Object.freeze([
   ['GET', /^\/config$/],
   ['GET', /^\/roster$/],
   ['GET', /^\/recap$/],
+  ['GET', /^\/biz-metrics$/],
   ['GET', /^\/settings$/],
   ['POST', /^\/settings$/],
   ['GET', /^\/chat\/cron-state$/],

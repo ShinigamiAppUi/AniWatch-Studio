@@ -1,6 +1,7 @@
 import type { RoomId } from './rooms'
 import type { SessionStatus, AgentStatus, MeterTotals } from './meters'
 import type { TaskBoardInfo } from './taskBoard'
+import type { BizMetrics } from './bizMetrics'
 
 export type AgentState =
   | 'idle'
@@ -304,6 +305,9 @@ export interface OfficeEvent {
     | 'health' | 'connection'
     // A session's task list changed (server/tasks.js), or the snapshot's boards (src/taskBoard.ts)
     | 'task_board'
+    // The business counters (webhook_server: GET /biz-metrics and the broadcast
+    // after every recorded event) — src/bizMetrics.ts, drawn by BizMetricsPanel
+    | 'biz_metric_update'
   agent?: Partial<Agent>
   agentId?: string
   status?: string
@@ -315,6 +319,8 @@ export interface OfficeEvent {
   // snapshot: every agent the server knows about (sent on each (re)connect), and the sessions
   activeAgents?: SnapshotAgent[]
   sessions?: SessionInfo[]
+  // biz_metric_update: the whole business-metrics object (src/bizMetrics.ts)
+  metrics?: BizMetrics
   // snapshot: the permission dialogs waiting on the office, and the token that answers them
   pendingPermissions?: PendingPermission[]
   uiToken?: string

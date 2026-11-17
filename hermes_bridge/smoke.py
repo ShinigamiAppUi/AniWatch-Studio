@@ -20,6 +20,8 @@ import sys
 import time
 from pathlib import Path
 
+from .env import load_env
+
 ROOT = Path(__file__).resolve().parent.parent
 TYPES_TS = ROOT / 'src' / 'types.ts'
 ROLE_RE = re.compile(r"^\s{2}([A-Za-z0-9_]+):\s+\{\s*color:\s*'", re.MULTILINE)
@@ -60,6 +62,8 @@ def resolve_token() -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # `.env` before the environment is read; a variable already set wins
+    load_env()
     parser = argparse.ArgumentParser(description='Put business characters in the office')
     parser.add_argument('--list', action='store_true', help='print the roles and exit')
     parser.add_argument('--role', help='one role: appear, work, finish')

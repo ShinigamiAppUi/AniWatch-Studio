@@ -245,6 +245,9 @@ tiket masuk → triage (kategori + prioritas) → kb.search(subject, top_k=3)
 - ⚠️ `wait_for_approval` hanya dipanggil **setelah** card dikirim, dan hanya **sekali** per tiket
   (fix Rev 3 #1 — versi lama memanggilnya dua kali dan agent menggantung).
 - Tiket disimpan di tabel `tickets` (DB-SCHEMA.md), context-nya key `ticket:<id>`.
+- `send_reply` **benar-benar mengirim** lewat SMTP (`hermes_agents/mailer.py`, ENV-VARS.md §3b).
+  Hasilnya menentukan status: terkirim → `pending` + counter `emails_sent`; gagal → tiket tetap `open`,
+  alasan disimpan di context (`send_error`) dan di outbox, supaya kartu SLA berikutnya menagihnya.
 
 ---
 
@@ -271,7 +274,7 @@ Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityCh
 **Key:** `Metadata` · **Tools:** `fetch_mal`, `fetch_anilist`, `update_db`
 **Trigger:** setelah Scraper · **Output:** judul, synopsis, thumbnail, genre, rating
 **Handoff:** → Encoder
-**Implementasi W3:** `agents/media.derive_metadata()` memakai sidecar `<episode>.json`; kalau tidak
+**Implementasi W3:** `hermes_agents/media.py` (`derive_metadata()`) memakai sidecar `<episode>.json`; kalau tidak
 ada, judul diturunkan dari slug nama file. `fetch_mal`/`fetch_anilist` **belum** dipanggil (butuh
 key), dan itu bukan fallback diam-diam: `metadata_source` mencatat `sidecar` atau `filename`.
 

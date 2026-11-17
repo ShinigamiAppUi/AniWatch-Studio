@@ -1,7 +1,94 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 3.4 — 17 Nov 2026 (kanal keluar Support)
+
+### Ditambahkan
+
+- `hermes_agents/mailer.py`: SMTP lewat stdlib (`smtplib` + `EmailMessage`) — tanpa OAuth, tanpa
+  dependensi baru. Header `From`/`Message-ID`/`Auto-Submitted: auto-replied`; `SMTP_SECURITY`
+  `starttls`/`ssl`/`none`; satu percobaan = satu baris di outbox `~/.hermes-office/outbox/replies.jsonl`
+  (0600), berhasil maupun gagal.
+- `send_reply` kini mengirim: terkirim → tiket `pending`, counter `emails_sent` bergerak; gagal → tiket
+  tetap `open`, `send_error` disimpan di context tiket, dan `handle_ticket` melaporkan `send_failed`
+  (bukan `replied`).
+- `GET /health` menambah `mail: {configured, last}`.
+- `.env.example` + ENV-VARS.md §3b: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`,
+  `SMTP_PASSWORD`, `SUPPORT_FROM`, `SUPPORT_FROM_NAME`, `SMTP_TIMEOUT_S`, `HERMES_OUTBOX`.
+- selfcheck 83 → **88** cek (transport injeksi: terkirim, gagal, alamat salah, outbox, tiket tetap open).
+
+---
+
+## Rev 3.3 — 17 Nov 2026 (W5 masuk kode)
+
+### Ditambahkan
+
+- `hermes_agents/kb.py` + `hermes_agents/kb_faq.md`: KB SQLite FTS5, **23 artikel** (PLAN minta 20).
+  `kb_articles` kini benar-benar `CREATE VIRTUAL TABLE … USING fts5` seperti DB-SCHEMA §9 —
+  database lama yang masih memakai tabel biasa diindeks ulang ke `kb_articles_fts`, tanpa DROP.
+  Query dibungkus per kata dan digabung `OR`: FTS5 memperlakukan spasi sebagai AND, sehingga satu
+  kata badan tiket yang tidak ada di artikel membuat tiket KB-hit tidak pernah cocok.
+- `hermes_agents/support.py`: `triage_ticket`, `search_kb`, `draft_reply`, `send_reply`, `resolve`,
+  `escalate`, `check_sla_breaches`. `send_reply` menulis balasan ke context tiket dan mengubah status
+  ke `pending` — **tidak** mengaku sudah mengirim email (kanal keluar belum ada).
+- `check_sla_breaches`: **satu** card untuk seluruh tiket telat, tiga opsi, `wait_for_approval`
+  dipanggil sekali; timeout tidak mengubah apa pun sehingga putaran berikutnya menagih lagi.
+- `hermes_agents/user_report.py`: triage (technical/account/spam/content), cek kesehatan episode,
+  `trigger_qc_pipeline`, `forward_to_support` (membuat tiket Support sungguhan), `notify_user`
+  (dicatat, kanal push belum ada), aturan duplikat 24 jam per episode.
+- `webhook_server/triggers.py`: `AGENT_HANDLERS` untuk `support_ticket`/`new_email`/`user_report`;
+  kerja agent jalan **juga saat headless**, dan bubble role berisi hasilnya (`replied tk-…`).
+- `webhook_server/jobs.py::sla_check` terdaftar di scheduler tiap 5 menit; `sla_check` keluar dari
+  `PENDING_JOBS` (tinggal 6 yang menunggu W6–W9).
+- `python -m hermes_agents.selfcheck` naik 59 → **83** cek.
+
+### Diperbaiki
+
+- `UserReportAgent.check_episode_health` menganggap episode sehat sebagai rusak: status yang benar
+  setelah publish adalah `live` (DB-SCHEMA §5), bukan `published`.
+
+
 Riwayat keputusan & perbaikan **dokumen**. Perubahan kode punya changelog sendiri di
 `/CHANGELOG.md` (base).
+
+---
+
+## Rev 3.2 — 17 Nov 2026 (W4 masuk kode)
+
+Bukan revisi dokumen: rilis pertama di mana kode menyusul dokumennya. Sumber per topik tidak
+berubah — yang berubah hanya status "belum ada" menjadi "ada".
+
+### Ditambahkan
+
+- `POST /webhook` (`webhook_server/triggers.py`): `X-Webhook-Secret` dibandingkan constant-time,
+  13 trigger dipetakan **eksplisit** ke role (tanpa fallback `ops`), dijawab `{"status":"queued"}`;
+  Orchestrator muncul lebih dulu, lalu role tujuannya. Type tak dikenal → 400.
+- `POST /webhook/payment` (`payments.py`): SHA-512 `order_id + status_code + gross_amount + key`,
+  `.get('')` untuk setiap field, satu baris per notifikasi (`INSERT OR IGNORE` di `payment_events`).
+- Sidecar menolak start tanpa `WEBHOOK_SECRET` / `MIDTRANS_SERVER_KEY` (`triggers.require_secrets`,
+  dipanggil dari lifespan).
+- `webhook_server/scheduler.py` + `jobs.py`: APScheduler dipasang dari lifespan (bukan saat import),
+  guard start-ganda, `max_instances=1` / `coalesce` / `misfire_grace_time`, dan 4 job yang kerjanya
+  sudah ada. Tujuh job lain tercatat di `PENDING_JOBS` dengan alasan, **tidak** didaftarkan.
+- `GET /health` kini memuat `jobs` dan `pending_jobs`.
+- `python -m hermes_agents.selfcheck` naik 37 → 59 cek (13 trigger, signature Midtrans, dua route,
+  scheduler, dan job-job-nya).
+- `src/components/BizMetricsPanel.tsx` + `src/bizMetrics.ts`: tombol **biz** di status strip membuka
+  angka `GET /biz-metrics` (leads, email, tiket, CRM, refund, chargeback, SLA, siapa yang bekerja);
+  `biz_metric_update` memperbaruinya tanpa menunggu poll 30 detik. `GET /biz-metrics` masuk allowlist
+  LAN full mode dengan alasannya.
+- `src/components/OrchestratorCard.tsx` + `src/orchestrator.ts`: tombol **orch** di status strip
+  menampilkan trigger yang sedang dirutekan (dari `route_trigger: <type> (<source>)`), yang sudah
+  lewat, katalog 13 trigger, dan 12 handoff `AGENT-HANDOFFS.md` §3 yang ditandai **pending** karena
+  `hermes_bridge/handoff.py` belum ada. Test membaca `triggers.py` dan tabel dokumen, jadi katalog
+  yang melenceng (atau W8 yang mendarat tanpa status diperbarui) langsung gagal.
+
+### Diperbaiki
+
+| # | Masalah | Perbaikan |
+| --- | --- | --- |
+| 1 | `approval.TTL_S` 6 jam, sementara empat dokumen menulis 24 jam | 24 jam + `sweep()` / `sweep_older_than()` untuk `approval_sweep` |
+| 2 | Log milik sidecar (`trigger=…`, `scheduler jalan`, durasi job) tidak pernah muncul karena uvicorn hanya mengatur logger-nya sendiri | `LOG_LEVEL` dipasang di lifespan; logger `apscheduler` diredam ke `WARNING` |
+| 3 | Kartu approval memotong `agentId` di `-` lalu mengapitalkan, jadi 14 dari 30 role (semua camelCase + `SEO`/`DMCA`) jatuh ke warna amber dan ✋ default | `roleFromAgentId()` (`src/bizApproval.ts`) mencocokkan tabel role tanpa peduli besar-kecil huruf; test menelusuri seluruh 30 role |
 
 ---
 

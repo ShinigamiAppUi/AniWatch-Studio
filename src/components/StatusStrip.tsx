@@ -18,7 +18,11 @@
  * link that fixes it.
  *
  * The "today" button at the right end opens the day's numbers (TodayPanel,
- * GET /recap): counts only, so it is there on a read-only page too.
+ * GET /recap): counts only, so it is there on a read-only page too. Beside it,
+ * "biz" opens the business counters (BizMetricsPanel, GET /biz-metrics and the
+ * sidecar's `biz_metric_update`), and "orch" what the Orchestrator is routing
+ * and which handoffs are still pending (OrchestratorCard): one popover at a
+ * time, same corner.
  *
  * VITE_HOOK_WARN_MS (build-time, ms) lowers the 60 s "no hook events yet"
  * threshold, for screenshots and demos.
@@ -31,6 +35,10 @@ import type { SessionInfo } from '../types'
 import { pillLabel } from './SessionStrip'
 import { officeHttpBase } from '../serverUrl'
 import TodayPanel from './TodayPanel'
+import BizMetricsPanel from './BizMetricsPanel'
+import OrchestratorCard from './OrchestratorCard'
+import type { BizMetrics } from '../bizMetrics'
+import type { OrchestratorState } from '../orchestrator'
 import '../styles/strip.css'
 
 const params = new URLSearchParams(window.location.search)
@@ -64,6 +72,10 @@ interface StatusStripProps {
   sessions?: SessionInfo[]
   /** The server sent the office read-only (useAgentSocket's `trusted` is false) */
   readOnly?: boolean
+  /** The newest biz_metric_update App.tsx has seen (src/bizMetrics.ts) */
+  bizMetrics?: BizMetrics | null
+  /** What the Orchestrator has routed so far (src/orchestrator.ts) */
+  orchestrator?: OrchestratorState
 }
 
 /** "just now", "12 s ago", "3 min ago", "2 h ago" */
@@ -138,12 +150,18 @@ function describe(h: HealthState, v: HookVerdict, now: number, c: StripCounts): 
   return lines.filter(Boolean).join('\n')
 }
 
-const StatusStrip: React.FC<StatusStripProps> = ({ office, sessions = [], readOnly = false }) => {
+const StatusStrip: React.FC<StatusStripProps> = ({ office, sessions = [], readOnly = false, bizMetrics = null, orchestrator }) => {
   // Sample the reducer's health once a second (also ticks the "ago" labels)
   const [view, setView] = useState(() => ({ health: office.current?.health ?? null, now: Date.now() }))
-  const [todayOpen, setTodayOpen] = useState(false)
+  // Why one state for both popovers: they share the bottom-right corner, so
+  // opening one closes the other instead of stacking them on top of each other
+  const [openPanel, setOpenPanel] = useState<'today' | 'biz' | 'orch' | null>(null)
   const todayRef = useRef<HTMLButtonElement>(null)
-  const closeToday = useCallback(() => setTodayOpen(false), [])
+  const bizRef = useRef<HTMLButtonElement>(null)
+  const orchRef = useRef<HTMLButtonElement>(null)
+  const closeToday = useCallback(() => setOpenPanel(p => (p === 'today' ? null : p)), [])
+  const closeBiz = useCallback(() => setOpenPanel(p => (p === 'biz' ? null : p)), [])
+  const closeOrch = useCallback(() => setOpenPanel(p => (p === 'orch' ? null : p)), [])
   useEffect(() => {
     if (MODE !== 'live') return
     const sample = () => setView({ health: office.current?.health ?? null, now: Date.now() })
@@ -204,11 +222,33 @@ const StatusStrip: React.FC<StatusStripProps> = ({ office, sessions = [], readOn
       {down && <span className="strip-item strip-hint">start it: <code>{START_CMD}</code></span>}
       {!down && v.kind === 'missing' && <span className="strip-item strip-hint"><code>{DOCTOR_CMD}</code></span>}
       <button
+        ref={orchRef}
+        type="button"
+        className={`strip-item strip-biz${openPanel === 'orch' ? ' open' : ''}`}
+        onClick={() => setOpenPanel(p => (p === 'orch' ? null : 'orch'))}
+        aria-expanded={openPanel === 'orch'}
+        title="Orchestrator: the trigger it is routing, and the handoffs still pending"
+        data-testid="strip-orch"
+      >
+        orch
+      </button>
+      <button
+        ref={bizRef}
+        type="button"
+        className={`strip-item strip-biz${openPanel === 'biz' ? ' open' : ''}`}
+        onClick={() => setOpenPanel(p => (p === 'biz' ? null : 'biz'))}
+        aria-expanded={openPanel === 'biz'}
+        title="Business today: leads, emails, tickets, CRM updates, refunds, chargebacks, SLA"
+        data-testid="strip-biz"
+      >
+        biz
+      </button>
+      <button
         ref={todayRef}
         type="button"
-        className={`strip-item strip-today${todayOpen ? ' open' : ''}`}
-        onClick={() => setTodayOpen(o => !o)}
-        aria-expanded={todayOpen}
+        className={`strip-item strip-today${openPanel === 'today' ? ' open' : ''}`}
+        onClick={() => setOpenPanel(p => (p === 'today' ? null : 'today'))}
+        aria-expanded={openPanel === 'today'}
         title="Today so far: sessions, agents, tasks, deploys, failures, incidents, payroll"
         data-testid="strip-today"
       >
@@ -216,7 +256,9 @@ const StatusStrip: React.FC<StatusStripProps> = ({ office, sessions = [], readOn
       </button>
       {s && <span className="strip-item strip-version">v{s.version}</span>}
     </div>
-    {todayOpen && <TodayPanel onClose={closeToday} anchor={todayRef} />}
+    {openPanel === 'today' && <TodayPanel onClose={closeToday} anchor={todayRef} />}
+    {openPanel === 'biz' && <BizMetricsPanel onClose={closeBiz} anchor={bizRef} live={bizMetrics} />}
+    {openPanel === 'orch' && orchestrator && <OrchestratorCard state={orchestrator} onClose={closeOrch} anchor={orchRef} />}
     </>
   )
 }

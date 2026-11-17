@@ -51,6 +51,24 @@ Catatan per job:
 - **`approval_sweep`** membuang keputusan approval yang tidak pernah diambil (TTL 24 jam), supaya
   store di memori tidak tumbuh. Ini bukan pengganti timeout agent: agent tetap timeout sendiri.
 
+### Status implementasi (W4)
+
+Didaftarkan sekarang, karena kerjaannya sudah ada di `webhook_server/jobs.py`:
+
+| id | Fungsi | Catatan |
+| --- | --- | --- |
+| `episode_embargo` | `run_episode_scheduler` | satu putaran `publish_due_episodes`, bukan `while True` |
+| `sla_check` | `sla_check` → `SupportAgent.check_sla_breaches` | tiap 5 menit; **satu** card untuk semua tiket telat, `wait_for_approval` sekali |
+| `shared_context_cleanup` | `cleanup_shared_context` | 24 jam; baris `ts` mundur diuji di selfcheck |
+| `approval_sweep` | `sweep_approvals` | TTL 24 jam, angka yang sama dengan `approval.TTL_S` |
+| `db_backup` | `backup_databases` | `~/.hermes-office/backups/YYYY-MM-DD/` |
+
+Belum didaftarkan, dan **sengaja tidak** didaftarkan sebagai job kosong: `email_check` (Support ada,
+kanal Gmail belum), `ops_check` (W5), `weekly_report`, `cache_warmer`, `recommendation_batch` (W6),
+dan `handoff_check` (W8). `start_scheduler()` menulis satu baris per job itu saat start, dan
+`GET /health` mengembalikan daftarnya di `pending_jobs` beserta alasannya — jadi yang belum ada
+terlihat sebagai belum ada. Zona waktu: `HERMES_TZ` (default `Asia/Jakarta`).
+
 ---
 
 ## 3. Implementasi

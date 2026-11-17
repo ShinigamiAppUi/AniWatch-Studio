@@ -15,7 +15,9 @@ from __future__ import annotations
 import threading
 import time
 
-TTL_S = 6 * 3600.0
+#: SCHEDULER.md §2 `approval_sweep`, ARCHITECTURE.md §6 and README.md §struktur
+#: all say 24 hours; `jobs.sweep_approvals` runs on the same number
+TTL_S = 24 * 3600.0
 MAX_ENTRIES = 1000
 
 
@@ -54,8 +56,22 @@ class ApprovalStore:
             entry = self._entries.pop((agent_id or '').strip(), None)
         return entry[0] if entry else None
 
+    def sweep(self, seconds: float | None = None) -> int:
+        """Drop decisions older than `seconds` (default: the TTL); returns how many.
+
+        Used by the hourly `approval_sweep` job. Agents time themselves out
+        (`wait_for_approval`), so this only stops the store growing.
+        """
+        limit = self._ttl if seconds is None else float(seconds)
+        now = time.time()
+        with self._lock:
+            stale = [key for key, (_, ts) in self._entries.items() if now - ts > limit]
+            for key in stale:
+                self._entries.pop(key, None)
+        return len(stale)
+
     def pending(self) -> int:
-        """How many cards are waiting for an answer."""
+        """How many decisions are waiting to be collected (not cards on screen)."""
         with self._lock:
             self._sweep(time.time())
             return len(self._entries)
@@ -71,3 +87,8 @@ _store = ApprovalStore()
 def store() -> ApprovalStore:
     """The process-wide mailbox."""
     return _store
+
+
+def sweep_older_than(seconds: float = TTL_S) -> int:
+    """Drop stale decisions from the process-wide mailbox; returns how many."""
+    return _store.sweep(seconds)

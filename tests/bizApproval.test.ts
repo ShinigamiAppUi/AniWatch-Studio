@@ -5,7 +5,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { reduceBizApprovals, type BizApproval } from '../src/bizApproval'
+import { reduceBizApprovals, roleFromAgentId, type BizApproval } from '../src/bizApproval'
+import { BUSINESS_AGENT_CONFIGS } from '../src/types'
 import { reduceOffice, initialOfficeState, type OfficeEnv, type OfficeState } from '../src/officeReducer'
 import { createAgent } from '../src/agentManager'
 import { findSpot } from '../src/rooms'
@@ -58,5 +59,35 @@ describe('the character raising its hand (src/officeReducer.ts)', () => {
     const after = state.agents.find(a => a.id === 'payment-1')!
     expect(after.statusText).toBe('✋ Refund Rp 149.000?')
     expect(after.lastFailed).toBe(false)
+  })
+})
+
+describe('the card finds the role from the bridge id (roleFromAgentId)', () => {
+  // `hermes_bridge.bridge.agent_start` builds every business id as
+  // `{role.toLowerCase()}-{uuid4[:6]}`; the card has to get the exact key back,
+  // because the key is what picks the colour, the emoji and the name
+  const bridgeId = (role: string) => `${role.toLowerCase()}-a1b2c3`
+
+  it('every one of the 30 business roles round-trips to its own config key', () => {
+    for (const role of Object.keys(BUSINESS_AGENT_CONFIGS)) {
+      expect(roleFromAgentId(bridgeId(role)), role).toBe(role)
+    }
+  })
+
+  it('camelCase roles and acronyms keep their own colour instead of the default amber', () => {
+    // The bug this replaces: split('-')[0] + capitalise gave `Paymentagent`,
+    // which is not a key, so these cards drew the ✋ fallback
+    for (const role of ['PaymentAgent', 'QualityChecker', 'TranslationAgent', 'EpisodeScheduler', 'UserReportAgent', 'SEO', 'DMCA', 'SecOps']) {
+      const id = bridgeId(role)
+      expect(roleFromAgentId(id), id).toBe(role)
+      expect(BUSINESS_AGENT_CONFIGS[roleFromAgentId(id) as keyof typeof BUSINESS_AGENT_CONFIGS].color)
+        .toBe(BUSINESS_AGENT_CONFIGS[role as keyof typeof BUSINESS_AGENT_CONFIGS].color)
+    }
+  })
+
+  it('an id that is not a business role still shows something readable', () => {
+    expect(roleFromAgentId('agent-w1')).toBe('Agent')
+    expect(roleFromAgentId('scraper-9f8e7d')).toBe('Scraper')
+    expect(roleFromAgentId('')).toBe('')
   })
 })

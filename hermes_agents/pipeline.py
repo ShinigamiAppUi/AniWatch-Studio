@@ -1,6 +1,6 @@
 """pipeline.py - one episode, eight characters, from source file to `live`.
 
-    python -m agents.pipeline --source ~/media/incoming/one-piece-s01e12.mp4
+    python -m hermes_agents.pipeline --source ~/media/incoming/one-piece-s01e12.mp4
 
 Order (AGENTS.md §4.2): Scraper → Metadata → Encoder → Subtitle →
 TranslationAgent → QualityChecker → EpisodeScheduler → (Notifier once live).
@@ -22,6 +22,8 @@ import logging
 import sys
 import time
 from pathlib import Path
+
+from hermes_bridge.env import load_env
 
 from . import config, media, store
 from .base import Agent
@@ -226,6 +228,9 @@ def run_episode(source: Path, *, episode_id: str | None = None, embargo_seconds:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # `.env` at the repository root, before anything reads a variable; the real
+    # environment wins over the file (hermes_bridge/env.py)
+    load_env()
     parser = argparse.ArgumentParser(description='Jalankan pipeline satu episode (W3)')
     parser.add_argument('--source', required=True, help='file video episode (SxxEyy di nama)')
     parser.add_argument('--episode', help='override episode id')

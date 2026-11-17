@@ -10,13 +10,21 @@ check the spelling first when a character does not appear.
 
 Nothing here reads an API key: the office token comes from `OFFICE_TOKEN` in
 the environment (the contents of `~/.agent-office/auth-token`). When it is
-missing the first send raises immediately instead of failing quietly.
+missing the send is retried, then kept in the DLQ with that error as its reason
+(`python -m hermes_bridge.smoke --all` reports how many are waiting).
+
+Nothing happens at import time: `init()` opens the dead-letter queue when the
+first event is sent (or when a script asks for it), and `OFFICE_URL` /
+`SIDECAR_URL` are read on every call. So an entry point may load `.env`
+(`hermes_bridge.env.load_env()`) or set a variable after importing this module
+and the next event uses it - there is no import-order trap.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 import uuid
 from typing import Iterable
@@ -27,8 +35,8 @@ from .queue import DeadLetterQueue
 
 log = logging.getLogger(__name__)
 
-OFFICE_URL = (os.environ.get('OFFICE_URL') or 'http://127.0.0.1:3334').rstrip('/')
-SIDECAR_URL = (os.environ.get('SIDECAR_URL') or 'http://127.0.0.1:8765').rstrip('/')
+DEFAULT_OFFICE_URL = 'http://127.0.0.1:3334'
+DEFAULT_SIDECAR_URL = 'http://127.0.0.1:8765'
 
 POST_TIMEOUT_S = 5.0
 RETRY_DELAYS_S = (0.5, 1.0, 2.0)
@@ -44,6 +52,25 @@ class BridgeError(RuntimeError):
     """The office cannot be reached, or the configuration cannot work."""
 
 
+def office_url() -> str:
+    """`OFFICE_URL` as it is now - not as it was when this module was imported."""
+    return (os.environ.get('OFFICE_URL') or DEFAULT_OFFICE_URL).rstrip('/')
+
+
+def sidecar_url() -> str:
+    """`SIDECAR_URL` as it is now; `server/biz-events.js` reads the same name."""
+    return (os.environ.get('SIDECAR_URL') or DEFAULT_SIDECAR_URL).rstrip('/')
+
+
+def __getattr__(name: str) -> str:
+    """Keep `bridge.OFFICE_URL` working, resolved live instead of at import."""
+    if name == 'OFFICE_URL':
+        return office_url()
+    if name == 'SIDECAR_URL':
+        return sidecar_url()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+
 def _token() -> str:
     token = os.environ.get('OFFICE_TOKEN', '').strip()
     if not token:
@@ -57,7 +84,7 @@ def _token() -> str:
 def _post_once(path: str, payload: dict) -> None:
     """One attempt, no retry, no queue. Raises on anything but a 2xx."""
     res = httpx.post(
-        f'{OFFICE_URL}{path}',
+        f'{office_url()}{path}',
         json=payload,
         headers={'Authorization': f'Bearer {_token()}'},
         timeout=POST_TIMEOUT_S,
@@ -73,8 +100,37 @@ def _send_metrics_once(delta: dict) -> None:
     _post_once('/biz-metrics', {'delta': delta})
 
 
-_dlq = DeadLetterQueue(post_event=_send_event_once, post_metrics=_send_metrics_once)
-_dlq.flush(force=True)
+_dlq: DeadLetterQueue | None = None
+_dlq_lock = threading.Lock()
+
+
+def init(flush: bool = False) -> DeadLetterQueue:
+    """Open the dead-letter queue from the environment as it is now.
+
+    Safe to call more than once: the queue is created once and reused, so a
+    process that calls `init()` on startup and an agent that never calls it end
+    up with the same queue.
+
+    Args:
+        flush: replay what earlier runs left in `dlq.db` right away (the first
+            event does this anyway, throttled to once every 30 seconds)
+
+    Returns:
+        The queue this module is using.
+    """
+    global _dlq
+    with _dlq_lock:
+        if _dlq is None:
+            _dlq = DeadLetterQueue(post_event=_send_event_once, post_metrics=_send_metrics_once)
+        queue = _dlq
+    if flush:
+        queue.flush(force=True)
+    return queue
+
+
+def _queue() -> DeadLetterQueue:
+    """The queue, opened on first use so importing this module does no I/O."""
+    return _dlq if _dlq is not None else init()
 
 
 def _post(payload: dict) -> None:
@@ -83,7 +139,7 @@ def _post(payload: dict) -> None:
     Private on purpose (Rev 3.1 #3): an agent calls the named functions below so
     the shape of an event stays in one file.
     """
-    _dlq.flush()  # drain earlier failures first; throttled inside the queue
+    _queue().flush()  # drain earlier failures first; throttled inside the queue
     last: Exception | None = None
     for delay in RETRY_DELAYS_S:
         try:
@@ -93,7 +149,7 @@ def _post(payload: dict) -> None:
             last = err
             time.sleep(delay)
     log.warning('bridge: could not send %s (%s); keeping it in the DLQ', payload.get('type'), last)
-    _dlq.push(payload, str(last or 'send failed'))
+    _queue().push(payload, str(last or 'send failed'))
 
 
 def _clean(value: str, limit: int) -> str:
@@ -166,7 +222,7 @@ def wait_for_approval(agent_id: str, timeout: float = 300) -> str:
     deadline = time.monotonic() + max(0.0, float(timeout))
     while True:
         try:
-            res = httpx.get(f'{SIDECAR_URL}/approval/{agent_id}', timeout=POST_TIMEOUT_S)
+            res = httpx.get(f'{sidecar_url()}/approval/{agent_id}', timeout=POST_TIMEOUT_S)
             res.raise_for_status()
             decision = (res.json() or {}).get('decision')
             if decision:
@@ -216,14 +272,14 @@ def update_biz_metrics(delta: dict) -> None:
         _send_metrics_once(delta)
     except Exception as err:  # noqa: BLE001 - metrics must not fail an agent's work
         log.warning('bridge: metrics not sent (%s); queued', err)
-        _dlq.push({'__type': 'biz_metrics', 'delta': delta}, str(err))
+        _queue().push({'__type': 'biz_metrics', 'delta': delta}, str(err))
 
 
 def flush_queue() -> int:
     """Replay everything the office refused so far; returns how many landed."""
-    return _dlq.flush(force=True)
+    return _queue().flush(force=True)
 
 
 def pending_events() -> int:
     """How many events are still waiting in the DLQ."""
-    return _dlq.pending()
+    return _queue().pending()

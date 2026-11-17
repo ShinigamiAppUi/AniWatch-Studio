@@ -17,7 +17,41 @@
  * when you can answer in the terminal instead.
  */
 
-import type { OfficeEvent } from './types'
+import { BUSINESS_AGENT_CONFIGS, type OfficeEvent } from './types'
+
+/** Role keys lowercased once, so an id can be matched without guessing capitals */
+const ROLE_BY_LOWER = new Map<string, string>(
+  Object.keys(BUSINESS_AGENT_CONFIGS).map(role => [role.toLowerCase(), role]),
+)
+
+/** The 6 hex digits `bridge.agent_start` appends to every business agent id */
+const ID_SUFFIX = /-[0-9a-f]{6}$/i
+
+/**
+ * `paymentagent-d4d556` -> `PaymentAgent`, `seo-b63366` -> `SEO`.
+ *
+ * The bridge builds every id as `{role.toLowerCase()}-{6 hex}`
+ * (`hermes_bridge/bridge.py`), so a role key is *not* recoverable by
+ * capitalising the slug: `paymentagent` would read `Paymentagent`, which is not
+ * a key in `BUSINESS_AGENT_CONFIGS`, and the card would quietly fall back to the
+ * default colour and ✋. Matching the table case-insensitively is what keeps the
+ * camelCase roles (PaymentAgent, QualityChecker, …) and the acronyms (SEO,
+ * DMCA) on their own colour, emoji and name.
+ *
+ * An id that matches no role is still humanised (`agent-w1` -> `Agent`) so a
+ * stranger shows something readable instead of nothing.
+ */
+export function roleFromAgentId(agentId: string): string {
+  const raw = String(agentId ?? '').trim()
+  if (!raw) return ''
+  // A bridge id ends in its hex suffix; any other id only offers the segment
+  // before the first dash (`agent-w1`, `main-s-…`), which is the old behaviour
+  const slug = (ID_SUFFIX.test(raw) ? raw.replace(ID_SUFFIX, '') : raw.split('-')[0]).toLowerCase()
+  if (!slug) return raw
+  const known = ROLE_BY_LOWER.get(slug)
+  if (known) return known
+  return slug.charAt(0).toUpperCase() + slug.slice(1)
+}
 
 /** One card: an agent, what it is asking, and the buttons it offered. */
 export interface BizApproval {

@@ -74,9 +74,9 @@ panel chat (`src/bizApproval.ts`), tombolnya mengirim `approval_response` lewat 
 episode `live` setelah embargo, dan `cancel_schedule` mencegah publish (diuji dengan DMCA palsu
 sebelum embargo habis).
 
-**Status W3:** selesai di `agents/` (`pipeline.py`, `media.py`, `episode_scheduler.py`,
-`notifier.py`, `store.py`, `base.py`). Uji ulang tanpa kantor/network: `python -m agents.selfcheck`
-(22 cek: satu episode sampai `live`, duplikat ditolak, cancel tidak pernah publish, publish tidak
+**Status W3:** selesai di `hermes_agents/` (`pipeline.py`, `media.py`, `episode_scheduler.py`,
+`notifier.py`, `store.py`, `base.py`). Uji ulang tanpa kantor/network: `python -m hermes_agents.selfcheck`
+(59 cek: `.env` terbaca dan bridge tetap inert sampai `init()`, satu episode sampai `live`, 13 trigger webhook, signature Midtrans, job scheduler, duplikat ditolak, cancel tidak pernah publish, publish tidak
 mengulang, QC dua kali → `failed` + handoff). Tanpa `ffmpeg`, jalankan dengan
 `HERMES_ENCODER=copy`; `encode_mode` mencatatnya, jadi tidak ada baris yang mengaku di-transcode.
 
@@ -92,11 +92,25 @@ mengulang, QC dua kali → `failed` + handoff). Tanpa `ffmpeg`, jalankan dengan
 yang memang dirancang; `cleanup_shared_context` terbukti menghapus baris > 24 jam (uji dengan
 `ts` mundur).
 
+**Status W4:** sisi masuk selesai di `webhook_server/` — `triggers.py` (13 trigger dipetakan
+eksplisit ke role, tanpa fallback `ops`), `payments.py` (SHA-512 + satu baris per notifikasi),
+`jobs.py`, `scheduler.py`, `main.py`. `POST /webhook` menjawab 403 / 400 / `{"status":"queued"}`,
+dan sidecar menolak start tanpa `WEBHOOK_SECRET` / `MIDTRANS_SERVER_KEY`. Scheduler baru
+mendaftarkan **4 job yang kerjanya ada** (`episode_embargo`, `shared_context_cleanup`,
+`approval_sweep`, `db_backup`); 7 sisanya tercatat di `PENDING_JOBS` beserta alasannya karena
+agent-nya baru ada di W5–W8 — bukan didaftarkan sebagai job kosong. Semuanya masuk
+`python -m hermes_agents.selfcheck` dan job CI `selfcheck`.
+
 ### W5 — Support + Community
 
-- Support dengan KB SQLite FTS5, minimal 20 artikel FAQ
-- Subtitle + Moderator + **UserReportAgent**
-- SLA tracking + `check_sla_breaches` (satu approval, bukan dua)
+- [x] Support dengan KB SQLite FTS5, 23 artikel FAQ (`hermes_agents/kb.py` + `kb_faq.md`)
+- [x] **UserReportAgent** (`hermes_agents/user_report.py`): triage → QC / Support / dismissed
+- [x] SLA tracking + `check_sla_breaches` (satu approval untuk semua tiket telat, 3 opsi)
+- [x] `sla_check` terdaftar di scheduler (tiap 5 menit) dan trigger `support_ticket` /
+  `new_email` / `user_report` menjalankan kerja agent, bukan cuma menggambar karakter
+- [x] Kanal keluar SMTP (`hermes_agents/mailer.py`): `send_reply` mengirim sungguhan; gagal kirim →
+  tiket tetap `open`, alasan tersimpan, setiap percobaan dicatat di outbox
+- [ ] Subtitle + Moderator (menyusul; bukan bagian dari kriteria terima W5 yang diuji di sini)
 
 **Deliverable:** tiket dari email/form dijawab dari KB atau dieskalasi; laporan user dirutekan.
 
@@ -156,7 +170,11 @@ schedule yang belum live.
 
 ### W10 — Dashboard + polish
 
-- `BizMetricsPanel.tsx` + `OrchestratorCard.tsx`
+- [x] `BizMetricsPanel.tsx` — ada: tombol **biz** di status strip, `GET /biz-metrics` +
+  `biz_metric_update` (`src/bizMetrics.ts`, 8 test di `tests/biz-metrics-ui.test.ts`)
+- [x] `OrchestratorCard.tsx` — ada: tombol **orch** di status strip, menampilkan trigger yang
+  sedang dirutekan, trigger yang sudah lewat, 13 trigger yang bisa dirutekan, dan 12 handoff
+  `pending` (`src/orchestrator.ts`). `build_orchestrator_graph()` di Python tetap W8.
 - SLA + metrics live, semua slash command terdaftar
 - CacheWarmer + Retention scheduler aktif
 - Backup harian (DB-SCHEMA.md §13)
@@ -214,7 +232,8 @@ dulu — keduanya tidak memblokir operasional harian.
 
 - [ ] Terlihat di kantor (bukan hanya log)
 - [ ] `npm test` hijau
-- [ ] `python -m compileall hermes_bridge webhook_server` bersih
+- [ ] `python -m compileall hermes_bridge webhook_server hermes_agents` bersih
+- [ ] `python -m hermes_agents.selfcheck` hijau (CI menjalankannya: job `selfcheck`, Python 3.11 dan 3.12)
 - [ ] Tidak ada `except: pass` baru
 - [ ] Env baru tercatat di ENV-VARS.md, tabel baru di DB-SCHEMA.md, endpoint baru di API-REFERENCE.md
 - [ ] Satu baris di CHANGELOG.md

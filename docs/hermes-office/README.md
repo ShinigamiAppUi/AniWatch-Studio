@@ -130,16 +130,16 @@ hermes-office/
 │   ├── biz-events.js             # ← BARU: ESM, /biz-metrics + forward approval
 │   └── chat-db.js                # base: ~/.agent-office/chat.db (0600)
 │
-├── agents/                       # ← BARU: 8 agent pipeline episode (W3)
+├── hermes_agents/                # ← BARU: pipeline episode (W3), support + kb + user_report (W5)
 ├── hermes_bridge/                # ← BARU: Python bridge
 │   ├── bridge.py                 # event → Express, retry, DLQ
 │   ├── queue.py                  # dead-letter queue SQLite
 │   ├── shared_context.py         # state antar agent (thread-safe)
 │   ├── db.py                     # koneksi + schema hermes.db
 │   ├── handoff.py                # envelope handoff
-│   ├── smoke.py                  # uji jembatan tanpa Hermes
-│   ├── agents/                   # 30 agent (lihat AGENTS.md)
-│   └── kb/                       # index.py, sqlite_kb.py, schema.sql, ingest.py
+│   └── smoke.py                  # uji jembatan tanpa Hermes
+│
+│   (agent-nya ada di hermes_agents/: support.py, kb.py, user_report.py; 30 role di AGENTS.md)
 │
 ├── webhook_server/               # ← BARU: FastAPI sidecar (127.0.0.1:8765)
 │   ├── main.py                   # /webhook, /approval/*, /webhook/payment, /health

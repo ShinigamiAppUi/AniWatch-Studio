@@ -19,6 +19,8 @@ import PermissionCards from './components/PermissionCard'
 import BizApprovalCards from './components/BizApprovalCards'
 import { reduceBizApprovals, type BizApproval, type BizApprovalAction } from './bizApproval'
 import { isPermissionEvent, reducePermissions, setUiToken, type PermissionAction, type PermissionCardState } from './permissions'
+import { parseBizMetrics, type BizMetrics } from './bizMetrics'
+import { initialOrchestratorState, reduceOrchestrator } from './orchestrator'
 import StatusStrip from './components/StatusStrip'
 import SettingsPanel from './components/SettingsPanel'
 import { readSound, saveVolume, saveMuted, readAmbience, saveAmbience, readDayNightMode, saveDayNightMode, type DayNightMode } from './settings'
@@ -780,6 +782,15 @@ const App: React.FC = () => {
   const [bizApprovals, setBizApprovals] = useState<BizApproval[]>([])
   const dispatchBizApprovals = useCallback((action: BizApprovalAction) => setBizApprovals(prev => reduceBizApprovals(prev, action)), [])
 
+  // The business counters (src/bizMetrics.ts): the status strip's "biz" panel
+  // draws them, and nothing on the floor reacts to them, so they stop here
+  const [bizMetrics, setBizMetrics] = useState<BizMetrics | null>(null)
+
+  // What the Orchestrator routed (src/orchestrator.ts): the status strip's
+  // "orch" card draws it. The reducer hands back the same object for events
+  // that say nothing about the Orchestrator, so setState bails out.
+  const [orchestrator, setOrchestrator] = useState(initialOrchestratorState)
+
   const handleEvent = useCallback((action: OfficeAction) => {
     // permission_request / _extended / _resolved are the cards' alone; the
     // snapshot also hands over the UI token and the pending list, then goes
@@ -822,6 +833,18 @@ const App: React.FC = () => {
       dispatchTaskBoards(action)
       return
     }
+    // The sidecar broadcast its counters (GET /biz-metrics): the panel's alone.
+    // parseBizMetrics refuses a payload that is not an object, so a stray
+    // broadcast cannot blank numbers already on screen.
+    if (action.type === 'biz_metric_update') {
+      const next = parseBizMetrics(action.metrics)
+      if (next) setBizMetrics(next)
+      return
+    }
+
+    // The Orchestrator's own bookkeeping (trigger routed, route finished) rides
+    // on events the office reducer already sees; it changes nothing on the floor
+    setOrchestrator(prev => reduceOrchestrator(prev, action, Date.now()))
 
     // One pure transition, then its effects flushed exactly once
     const { state, effects } = reduceOffice(officeRef.current!, action, officeEnv())
@@ -1899,7 +1922,7 @@ const App: React.FC = () => {
       />
       </div>
       </div>
-      <StatusStrip office={officeRef} sessions={sessions} readOnly={readOnly} />
+      <StatusStrip office={officeRef} sessions={sessions} readOnly={readOnly} bizMetrics={bizMetrics} orchestrator={orchestrator} />
     </div>
   )
 }

@@ -170,7 +170,7 @@ describe('server/lan.js: LAN_FULL_ROUTES is an allowlist', () => {
     expect(lanFullRouteAllowed('GET', undefined as any)).toBe(false)
     // Frozen: nothing adds a route at run time
     expect(Object.isFrozen(LAN_FULL_ROUTES)).toBe(true)
-    expect(LAN_FULL_ROUTES).toHaveLength(10)
+    expect(LAN_FULL_ROUTES).toHaveLength(11)
   })
 
   it('no route the server guards with the office token is on it', () => {
@@ -202,7 +202,7 @@ describe('server/lan.js: LAN_FULL_ROUTES is an allowlist', () => {
       }
     }
     walk(join(__dirname, '..', 'src'))
-    expect([...paths].sort()).toEqual(['/agents/', '/chat', '/chat/cron-state', '/config', '/permission/', '/recap', '/roster', '/settings'])
+    expect([...paths].sort()).toEqual(['/agents/', '/biz-metrics', '/chat', '/chat/cron-state', '/config', '/permission/', '/recap', '/roster', '/settings'])
     for (const path of paths) {
       const probe = path.endsWith('/') ? `${path}some-id` : path
       expect(LAN_FULL_ROUTES.some(([, pattern]) => (pattern as RegExp).test(probe)), probe).toBe(true)

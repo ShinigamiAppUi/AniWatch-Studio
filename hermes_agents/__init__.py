@@ -6,4 +6,5 @@ deterministic and file/DB based: nothing here depends on the office being up
 (ADR-3), so a pipeline run works headless and the characters are a view of it.
 """
 
-__all__ = ['base', 'config', 'media', 'pipeline', 'episode_scheduler', 'notifier', 'store']
+__all__ = ['base', 'config', 'kb', 'mailer', 'media', 'pipeline', 'episode_scheduler',
+           'notifier', 'store', 'support', 'user_report']

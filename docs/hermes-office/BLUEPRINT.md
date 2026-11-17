@@ -86,7 +86,7 @@ Aturan: kalau sebuah perubahan menyentuh lebih dari **dua baris** di file base s
 | Webhook + scheduler | Agent hanya bisa dipicu manual | `webhook_server/` (SCHEDULER.md) |
 | Knowledge base Support | Support tidak bisa jawab dari FAQ | `hermes_bridge/kb/` |
 | Business metrics | Tidak ada padanan meters untuk tim bisnis | `BizMetricsPanel.tsx` |
-| Orchestrator | Tidak ada koordinasi antar agent | `agents/orchestrator.py` |
+| Orchestrator | Tidak ada koordinasi antar agent | `hermes_agents/orchestrator.py` |
 | Handoff protocol | Sales tidak bisa oper context ke Marketing/Support | AGENT-HANDOFFS.md |
 | Dead-letter queue | Event hilang saat server mati | `queue.py` |
 | Approval callback | Agent Python tidak tahu keputusan user | `approval.py` + `biz-events.js` |
@@ -191,7 +191,7 @@ Nomor 5 adalah satu-satunya jalur dua arah. Detail callback: [API-REFERENCE.md](
 
 | # | Fix | Letak |
 | --- | --- | --- |
-| 🔴 1 | `check_sla_breaches` tidak lagi double `wait_for_approval` | agents/support.py |
+| 🔴 1 | `check_sla_breaches` tidak lagi double `wait_for_approval` | hermes_agents/support.py |
 | 🟠 2 | `update_biz_metrics` POST ke `/biz-metrics`, tidak lewat `/event` | bridge.py |
 | 🟠 3 | `SIDECAR_URL` konsisten (bukan `HERMES_SIDECAR_URL`) | biz-events.js, bridge.py |
 | 🟠 4 | Webhook tidak melewati Orchestrator | webhook_server/main.py |
@@ -254,6 +254,8 @@ Premium & payment
 - [ ] Refund → approval card → approve/tolak diuji
 
 Frontend & docs
-- [ ] `BizMetricsPanel` menampilkan data live
+- [x] `BizMetricsPanel` menampilkan data live (`src/components/BizMetricsPanel.tsx`)
+- [x] `OrchestratorCard` menampilkan alur trigger + handoff pending
+      (`src/components/OrchestratorCard.tsx`); `run_orchestrator` di Python menyusul di W8
 - [ ] Slash command baru terdaftar di chat routing
 - [ ] `npm run doctor` semua green

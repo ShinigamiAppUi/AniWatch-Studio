@@ -55,6 +55,48 @@ jobs:
         # public/ stays under its size budget (scripts/check-assets.mjs)
         run: npm run check-assets
 
+  selfcheck:
+    # PLAN.md's definition of done has a Python half: `compileall` clean and
+    # `python -m hermes_agents.selfcheck` passing (`.env` loading, a bridge that
+    # is inert until init(), one episode to live, the embargo queue, DMCA's
+    # cancel, the duplicate guard, the QC handoff). It needs no office, no
+    # network and no Hermes/Ollama: its only import outside the standard library
+    # is httpx (`hermes_bridge.bridge` posts events with it), so this installs
+    # that one package instead of requirements.txt, whose LangGraph/APScheduler
+    # half is for W4+. 3.11 is the floor the docs promise, 3.12 what devs run.
+    name: selfcheck on python ${{ matrix.python }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install the dependencies these checks import
+        # httpx: hermes_bridge.bridge posts events with it
+        # fastapi: webhook_server.main, exercised through fastapi.testclient
+        # apscheduler: webhook_server.scheduler, whose jobs are checked directly
+        # Not requirements.txt: its LangGraph/uvicorn half is for the runtime, not the checks.
+        run: python -m pip install --upgrade pip httpx fastapi apscheduler
+
+      - name: Byte-compile every Python package
+        run: python -m compileall -q hermes_bridge webhook_server hermes_agents
+
+      - name: Run the acceptance checks
+        # Headless by design (ADR-3): a throwaway HERMES_MEDIA_DIR/HERMES_DB/
+        # SHARED_DB/DLQ_DB under the runner's temp dir, OFFICE_TOKEN cleared, so
+        # nothing here can touch real episode data or a running office. Covers
+        # W3 (one episode to live) and W4 (the two webhook doors, the trigger
+        # table, Midtrans signatures, the scheduler's jobs).
+        run: python -m hermes_agents.selfcheck
+
   hook-smoke:
     # The hook is the one piece every user runs, and three of its bugs were
     # only visible off Linux: bash 3.2 on macOS could not parse it (#53),

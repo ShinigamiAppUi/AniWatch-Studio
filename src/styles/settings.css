@@ -255,8 +255,9 @@
 }
 .sp-value { color: var(--op-muted); width: 34px; text-align: right; }
 
-/* ---- the "today" button in the status strip ---- */
-.strip-today {
+/* ---- the "today" and "biz" buttons in the status strip ---- */
+.strip-today,
+.strip-biz {
   background: none;
   border: 1px solid var(--strip-border);
   border-radius: 3px;
@@ -269,7 +270,9 @@
   cursor: pointer;
 }
 .strip-today:hover,
-.strip-today.open {
+.strip-today.open,
+.strip-biz:hover,
+.strip-biz.open {
   color: var(--strip-needs-you);
   border-color: var(--strip-dim);
 }
@@ -299,3 +302,88 @@
 .today-grid dd.tone-dim  { color: var(--op-dim); }
 .today-grid dd.tone-good { color: var(--op-ok); }
 .today-grid dd.tone-bad  { color: var(--op-bad); }
+
+/* ---- Business metrics popover: the same corner as Today, never both ---- */
+.biz-panel {
+  bottom: 24px;
+  right: 8px;
+  width: 250px;
+  max-width: calc(100% - 16px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .biz-panel { animation-name: popoverUp; }
+}
+.biz-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 12px;
+  row-gap: 1px;
+}
+.biz-grid dt { color: var(--op-muted); }
+.biz-grid dd { text-align: right; font-variant-numeric: tabular-nums; }
+.biz-grid dd.tone-dim  { color: var(--op-dim); }
+.biz-grid dd.tone-good { color: var(--op-ok); }
+.biz-grid dd.tone-bad  { color: var(--op-bad); }
+.biz-agents { margin-top: 5px; color: var(--op-muted); }
+.biz-agents span { color: var(--op-fg); }
+
+/* ---- Orchestrator popover: triggers, what is routing, handoffs pending ---- */
+.orch-panel {
+  bottom: 24px;
+  right: 8px;
+  width: 296px;
+  max-width: calc(100% - 16px);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .orch-panel { animation-name: popoverUp; }
+}
+.orch-section { margin-top: 6px; }
+.orch-section + .orch-section {
+  border-top: 1px solid var(--op-border);
+  padding-top: 5px;
+}
+.orch-head {
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--op-dim);
+  margin-bottom: 2px;
+}
+.orch-grid { display: grid; row-gap: 1px; }
+.orch-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.orch-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orch-role, .orch-meta { color: var(--op-muted); font-size: 9px; white-space: nowrap; }
+.orch-count { color: var(--op-accent); font-size: 9px; }
+.orch-dim { opacity: 0.55; }
+.orch-now { color: var(--op-accent); }
+.orch-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--op-accent);
+  flex: 0 0 auto;
+}
+.orch-chip {
+  border: 1px solid var(--op-border);
+  border-radius: 2px;
+  padding: 0 3px;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--op-dim);
+  flex: 0 0 auto;
+}
+.orch-handoffs .orch-name { color: var(--op-muted); }

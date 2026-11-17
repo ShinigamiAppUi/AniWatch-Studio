@@ -55,8 +55,9 @@ menerima 401 dan semua event masuk DLQ. Itu perilaku yang benar: perbarui env, r
 | `HERMES_MODEL` | tidak | string | `nous-hermes-2` | agent, Ollama | model yang dipanggil |
 | `OLLAMA_URL` | tidak | URL | `http://127.0.0.1:11434` | agent | endpoint Ollama |
 | `KB_BACKEND` | tidak | enum | `sqlite` | `kb/index.py` | `sqlite` \| `chroma` |
-| `KB_MIN_SCORE` | tidak | float | `0.5` | `agents/support.py` | ambang relevansi FTS5 (relatif!) |
+| `KB_MIN_SCORE` | tidak | float | `0.5` | `hermes_agents/kb.py` | ambang relevansi FTS5 (relatif!) |
 | `LOG_LEVEL` | tidak | enum | `INFO` | semua Python | `DEBUG` \| `INFO` \| `WARNING` |
+| `HERMES_TZ` | tidak | string | `Asia/Jakarta` | `webhook_server/scheduler.py` | zona waktu job APScheduler |
 
 `MIDTRANS_SERVER_KEY` wajib walau PaymentAgent belum dipakai: tanpa itu endpoint
 `/webhook/payment` menerima notifikasi palsu tanpa verifikasi. Kalau memang belum ada Midtrans,
@@ -85,7 +86,7 @@ set nilai acak panjang — jangan kosongkan, dan jangan matikan verifikasi.
 | `DEEPL_API_KEY` | TranslationAgent (kalau `deepl`) | guard: provider `deepl` tanpa key = error saat start agent |
 | `TRANSLATION_QA_THRESHOLD` | TranslationAgent | default `0.75`; di bawah ini → permission card |
 
-### 3a. Pipeline episode (W3) — dipakai `agents/`
+### 3a. Pipeline episode (W3) — dipakai `hermes_agents/`
 
 | Variabel | Wajib | Default | Arti |
 | --- | --- | --- | --- |
@@ -97,6 +98,28 @@ set nilai acak panjang — jangan kosongkan, dan jangan matikan verifikasi.
 
 `TRANSLATION_PROVIDER` default di kode sekarang **`local`** (glossary), bukan `deepl`: tanpa key,
 `deepl`/`openai` gagal jelas (`MissingCredentials`), bukan diam-diam pindah provider.
+
+### 3b. Kanal keluar Support (W5) — `hermes_agents/mailer.py`
+
+Balasan Support dikirim lewat **SMTP** (stdlib `smtplib`), bukan Gmail API: tanpa OAuth, tanpa
+dependensi baru, dan provider apa pun yang punya endpoint SMTP bisa dipakai. Baris `GOOGLE_*` di
+§3 tetap untuk agent lain.
+
+| Variabel | Wajib | Default | Arti |
+| --- | --- | --- | --- |
+| `SMTP_HOST` | ya, untuk mengirim | — (kosong) | kalau kosong, balasan **gagal** dengan alasan `SMTP belum dikonfigurasi`; tiket tetap `open` |
+| `SMTP_PORT` | tidak | `587`/`465`/`25` | default ikut `SMTP_SECURITY` |
+| `SMTP_SECURITY` | tidak | `starttls` | `starttls` \| `ssl` \| `none` (nilai aneh → `starttls`) |
+| `SMTP_USER` | tidak | — | kalau diisi, `login()` dipanggil |
+| `SMTP_PASSWORD` | tidak | — | jangan pernah ditulis di `.env.example` |
+| `SUPPORT_FROM` | tidak | `SMTP_USER` atau `support@aniwatch.example` | alamat pengirim di header `From` |
+| `SUPPORT_FROM_NAME` | tidak | `AniWatch Support` | nama pengirim |
+| `SMTP_TIMEOUT_S` | tidak | `15` | timeout koneksi/kirim |
+| `HERMES_OUTBOX` | tidak | `~/.hermes-office/outbox/replies.jsonl` | catatan **setiap** percobaan kirim (berhasil maupun gagal), 0600 |
+
+Kegagalan kirim **bukan** pengecualian: `mailer.send()` mengembalikan `{sent, error}`, outbox mencatat,
+tiket tetap `open` sehingga kartu SLA berikutnya menagihnya. Status terakhir terlihat di `GET /health`
+(`mail.configured`, `mail.last`).
 
 Prinsip: integrasi opsional **tidak** boleh menggagalkan agent lain. Yang hilang hanya tool terkait,
 dan itu harus terlihat sebagai `agent_error` yang jelas, bukan `except: pass`.
@@ -134,6 +157,19 @@ HERMES_MODEL=nous-hermes-2
 OLLAMA_URL=http://127.0.0.1:11434
 KB_BACKEND=sqlite
 KB_MIN_SCORE=0.5
+# --- Kanal keluar Support (W5) -------------------------------------------
+# Tanpa SMTP_HOST, balasan Support gagal dengan alasan yang jelas dan tiket
+# tetap open (bukan diam-diam dianggap terkirim).
+# SMTP_HOST=smtp.contoh.com
+# SMTP_PORT=587
+# SMTP_SECURITY=starttls      # starttls | ssl | none
+# SMTP_USER=
+# SMTP_PASSWORD=
+SUPPORT_FROM=support@aniwatch.example
+SUPPORT_FROM_NAME=AniWatch Support
+# SMTP_TIMEOUT_S=15
+# HERMES_OUTBOX=~/.hermes-office/outbox/replies.jsonl
+
 LOG_LEVEL=INFO
 
 # ── Integrasi (opsional) ───────────────────────────────────────────────────
@@ -163,13 +199,19 @@ TRANSLATION_QA_THRESHOLD=0.75
 | --- | --- | --- |
 | Express (`server/index.js`) | `process.env` | hanya butuh `AGENT_OFFICE_*` |
 | `biz-events.js` | `process.env.SIDECAR_URL` | **tidak** butuh token sidecar |
-| `bridge.py` | `os.getenv` saat import | bridge tidak memanggil `load_dotenv`; sidecar yang memuat |
-| `webhook_server/main.py` | `load_dotenv()` di awal | satu-satunya pemuat `.env` |
+| `bridge.py` | `os.getenv` di setiap panggilan | tidak ada I/O saat import; `init()` membuka DLQ |
+| `webhook_server/main.py` | `hermes_bridge.env.load_env()` | satu fungsi pemuat, dipakai semua entry point |
+| Pipeline / selfcheck / smoke | `load_env()` di `main()` | `python -m hermes_agents.pipeline`, `...selfcheck`, `...hermes_bridge.smoke` |
 | Agent | `os.getenv` saat dipakai | jangan baca env di dalam loop panas |
 | Scheduler | idem | — |
 
 Kenapa bridge tidak memuat `.env` sendiri: satu file `.env`, satu pemuat, satu sumber kebenaran.
-Bridge selalu dijalankan oleh sidecar (in-process) atau oleh skrip yang sudah `source .env`.
+Yang memuat adalah **entry point** lewat `hermes_bridge/env.py`; `bridge.py` tetap import-safe dan
+membaca `OFFICE_URL` / `SIDECAR_URL` di setiap panggilan, jadi variabel yang di-set setelah import
+(tombol `.env`, `export`, atau override satu kali jalan) tetap dipakai event berikutnya.
+
+Nilai yang sudah ada di environment **menang** atas `.env`. Bentuk `OFFICE_TOKEN=$(cat ...)` dan
+`${VAR:-default}` ikut dibaca, karena itu yang dipakai `.env.example`.
 
 ---
 

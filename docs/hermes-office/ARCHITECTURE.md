@@ -25,7 +25,7 @@ Isi tiap modul ada di file topiknya.
 │  ┌──────────────────────┴───────────────────────┐       │                             │
 │  │  hermes_bridge (Python, in-process agent)    │       │                             │
 │  │  bridge.py · queue.py · shared_context.py    │       │                             │
-│  │  agents/*.py (LangGraph + Hermes/Ollama)     │       │                             │
+│  │  hermes_agents/*.py (Hermes/Ollama)          │       │                             │
 │  └──────┬───────────────────────────┬───────────┘       │                             │
 │         │ GET /approval/{id}        │ HTTP tool calls    │                             │
 │         ▼                           ▼                    │                             │

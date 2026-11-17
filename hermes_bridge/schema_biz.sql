@@ -107,13 +107,10 @@ CREATE TABLE IF NOT EXISTS premium_items (
 CREATE INDEX IF NOT EXISTS idx_items_status ON premium_items (status, created_at);
 
 -- 9. Knowledge base --------------------------------------------------------
-CREATE TABLE IF NOT EXISTS kb_articles (
-    id         TEXT PRIMARY KEY,
-    title      TEXT NOT NULL,
-    body       TEXT NOT NULL,
-    tags       TEXT,
-    category   TEXT,
-    updated_at REAL NOT NULL
+-- FTS5 (DB-SCHEMA.md §9): `SupportAgent.search_kb` needs `MATCH` and bm25.
+-- Ids are UNIQUE inside FTS5 tables too, and `SQLiteKB.upsert` deletes first.
+CREATE VIRTUAL TABLE IF NOT EXISTS kb_articles USING fts5(
+    id UNINDEXED, title, body, tags, category, updated_at UNINDEXED
 );
 
 CREATE TABLE IF NOT EXISTS kb_meta (
