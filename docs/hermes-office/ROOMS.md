@@ -135,20 +135,24 @@ Deretan meja paling kanan-belakang, di luar 10 `spot-*` dev (dan tidak pernah di
 Sisi kanan lantai (berlian), di luar 6 `srv-*` MCP; dijangkau dari junction `W-srv-biz` yang
 tersambung ke `W-srv-in` (dekat pintu).
 
-| Desk | Role | x | y |
-| --- | --- | --- |
-| `biz-s1` | Scraper | 68.0 | 60.0 |
-| `biz-s2` | Metadata | 72.5 | 63.0 |
-| `biz-s3` | Encoder | 77.0 | 66.0 |
-| `biz-s4` | Subtitle | 66.0 | 68.0 |
-| `biz-s5` | TranslationAgent | 70.5 | 71.0 |
-| `biz-s6` | QualityChecker | 75.0 | 74.0 |
-| `biz-s7` | EpisodeScheduler | 62.0 | 74.0 |
-| `biz-s8` | Notifier | 66.5 | 77.0 |
-| `biz-s9` | CacheWarmer | 58.0 | 80.0 |
-| `biz-s10` | Resolver | 53.5 | 76.0 |
+| Desk | Role | x | y | zIndex |
+| --- | --- | --- | --- | --- |
+| `biz-s1` | Scraper | 31.0 | 68.0 | 64 |
+| `biz-s2` | Metadata | 35.3 | 70.6 | 68 |
+| `biz-s3` | Encoder | 39.6 | 73.2 | 72 |
+| `biz-s4` | Subtitle | 43.9 | 75.8 | 76 |
+| `biz-s5` | TranslationAgent | 48.2 | 78.4 | 80 |
+| `biz-s6` | QualityChecker | 53.0 | 68.0 | 64 |
+| `biz-s7` | EpisodeScheduler | 57.3 | 70.6 | 68 |
+| `biz-s8` | Notifier | 61.6 | 73.2 | 72 |
+| `biz-s9` | CacheWarmer | 65.9 | 75.8 | 76 |
+| `biz-s10` | Resolver | 70.2 | 78.4 | 80 |
 
-Semua `facing: 'up'`, `spriteFacing: 'rear-left'`, `zIndex` 62–72.
+Semua `facing: 'up'`, `spriteFacing: 'rear-left'`. Dua bangku lima meja di lantai kosong depan
+rak; tiap bangku satu baris diagonal turun ke kanan. Tiap spot punya mejanya sendiri di `furniture`
+(`biz-desk-1..biz-desk-10`, sprite `desk-standing-left-rear`/`-right-rear` bergantian, anchor sama
+dengan spotnya, `zIndex` = zIndex spot − 2): worker di mejanya sendiri digambar di atas mejanya,
+sedangkan meja satu langkah lebih depan menutup worker di belakangnya.
 
 ### 5.3 Business Suite — `biz-b1..b6`
 

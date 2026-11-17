@@ -454,6 +454,22 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'srv-rack-6', type: 'server-rack', sprite: 'server-rack-3', x: 17.3, y: 61.6, zIndex: 35 },
       { id: 'srv-cabinet', type: 'network-cabinet', sprite: 'network-cabinet', x: 12.2, y: 65.5, zIndex: 40 },
       { id: 'srv-cart', type: 'crash-cart', sprite: 'crash-cart', x: 79.8, y: 66.2, zIndex: 45 },
+
+      // Core Ops: two benches of five standing desks on the free floor in front
+      // of the racks, one behind each biz-s* spot. The worker faces away from
+      // us, so the rear sprite (we see the monitor backs). A desk's zIndex is
+      // its spot's minus 2: the worker at a desk draws over its own desk, and
+      // the desk one step nearer draws over the worker in front of it.
+      { id: 'biz-desk-1', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 31.0, y: 68.0, zIndex: 62 },
+      { id: 'biz-desk-2', type: 'desk-standing', sprite: 'desk-standing-right-rear', x: 35.3, y: 70.6, zIndex: 66 },
+      { id: 'biz-desk-3', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 39.6, y: 73.2, zIndex: 70 },
+      { id: 'biz-desk-4', type: 'desk-standing', sprite: 'desk-standing-right-rear', x: 43.9, y: 75.8, zIndex: 74 },
+      { id: 'biz-desk-5', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 48.2, y: 78.4, zIndex: 78 },
+      { id: 'biz-desk-6', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 53.0, y: 68.0, zIndex: 62 },
+      { id: 'biz-desk-7', type: 'desk-standing', sprite: 'desk-standing-right-rear', x: 57.3, y: 70.6, zIndex: 66 },
+      { id: 'biz-desk-8', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 61.6, y: 73.2, zIndex: 70 },
+      { id: 'biz-desk-9', type: 'desk-standing', sprite: 'desk-standing-right-rear', x: 65.9, y: 75.8, zIndex: 74 },
+      { id: 'biz-desk-10', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 70.2, y: 78.4, zIndex: 78 },
     ],
     connections: [
       { toRoom: 'corridor', position: { x: 68.5, y: 53 }, label: 'Corridor', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 64.6, y: 24, w: 9.4, h: 29.6 } },
@@ -466,16 +482,17 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'srv-5', type: 'standing', x: 30.4, y: 61.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 54 },
       { id: 'srv-6', type: 'standing', x: 25.6, y: 64.4, facing: 'up', spriteFacing: 'rear-left', zIndex: 55 },
 
-      { id: 'biz-s1', type: 'desk', x: 68.0, y: 60.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 62 },
-      { id: 'biz-s2', type: 'desk', x: 72.5, y: 63.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 63 },
-      { id: 'biz-s3', type: 'desk', x: 77.0, y: 66.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 64 },
-      { id: 'biz-s4', type: 'desk', x: 66.0, y: 68.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 66 },
-      { id: 'biz-s5', type: 'desk', x: 70.5, y: 71.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 67 },
-      { id: 'biz-s6', type: 'desk', x: 75.0, y: 74.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 68 },
-      { id: 'biz-s7', type: 'desk', x: 62.0, y: 74.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 70 },
-      { id: 'biz-s8', type: 'desk', x: 66.5, y: 77.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 71 },
-      { id: 'biz-s9', type: 'desk', x: 58.0, y: 80.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 72 },
-      { id: 'biz-s10', type: 'desk', x: 53.5, y: 76.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 72 },
+      // Face of each desk above it; the two benches run along the floor in front of the racks
+      { id: 'biz-s1', type: 'desk', x: 31.0, y: 68.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 64 },
+      { id: 'biz-s2', type: 'desk', x: 35.3, y: 70.6, facing: 'up', spriteFacing: 'rear-left', zIndex: 68 },
+      { id: 'biz-s3', type: 'desk', x: 39.6, y: 73.2, facing: 'up', spriteFacing: 'rear-left', zIndex: 72 },
+      { id: 'biz-s4', type: 'desk', x: 43.9, y: 75.8, facing: 'up', spriteFacing: 'rear-left', zIndex: 76 },
+      { id: 'biz-s5', type: 'desk', x: 48.2, y: 78.4, facing: 'up', spriteFacing: 'rear-left', zIndex: 80 },
+      { id: 'biz-s6', type: 'desk', x: 53.0, y: 68.0, facing: 'up', spriteFacing: 'rear-left', zIndex: 64 },
+      { id: 'biz-s7', type: 'desk', x: 57.3, y: 70.6, facing: 'up', spriteFacing: 'rear-left', zIndex: 68 },
+      { id: 'biz-s8', type: 'desk', x: 61.6, y: 73.2, facing: 'up', spriteFacing: 'rear-left', zIndex: 72 },
+      { id: 'biz-s9', type: 'desk', x: 65.9, y: 75.8, facing: 'up', spriteFacing: 'rear-left', zIndex: 76 },
+      { id: 'biz-s10', type: 'desk', x: 70.2, y: 78.4, facing: 'up', spriteFacing: 'rear-left', zIndex: 80 },
     ],
     entryPoint: { x: 68.5, y: 53 },
     walkableArea: [{ x: 43.8, y: 38.8 }, { x: 93.0, y: 65.6 }, { x: 54.5, y: 94.0 }, { x: 6.0, y: 64.6 }],
@@ -495,16 +512,16 @@ export const ROOMS: Record<RoomId, Room> = {
 
       // Core Ops: their own row of desks, reached from the door side of the room
       { id: 'W-srv-biz', x: 64.0, y: 64.0, connections: ['W-srv-in', 'W-biz-s1', 'W-biz-s2', 'W-biz-s3', 'W-biz-s4', 'W-biz-s5', 'W-biz-s6', 'W-biz-s7', 'W-biz-s8', 'W-biz-s9', 'W-biz-s10'] },
-      { id: 'W-biz-s1', x: 68.0, y: 60.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s2', x: 72.5, y: 63.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s3', x: 77.0, y: 66.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s4', x: 66.0, y: 68.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s5', x: 70.5, y: 71.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s6', x: 75.0, y: 74.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s7', x: 62.0, y: 74.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s8', x: 66.5, y: 77.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s9', x: 58.0, y: 80.0, connections: ['W-srv-biz'] },
-      { id: 'W-biz-s10', x: 53.5, y: 76.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s1', x: 31.0, y: 68.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s2', x: 35.3, y: 70.6, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s3', x: 39.6, y: 73.2, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s4', x: 43.9, y: 75.8, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s5', x: 48.2, y: 78.4, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s6', x: 53.0, y: 68.0, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s7', x: 57.3, y: 70.6, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s8', x: 61.6, y: 73.2, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s9', x: 65.9, y: 75.8, connections: ['W-srv-biz'] },
+      { id: 'W-biz-s10', x: 70.2, y: 78.4, connections: ['W-srv-biz'] },
     ],
   },
 
