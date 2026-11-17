@@ -142,6 +142,24 @@ tiket tetap `open` sehingga kartu SLA berikutnya menagihnya. Status terakhir ter
 Prinsip: integrasi opsional **tidak** boleh menggagalkan agent lain. Yang hilang hanya tool terkait,
 dan itu harus terlihat sebagai `agent_error` yang jelas, bukan `except: pass`.
 
+### 3d. Growth (W6) — `hermes_agents/growth_data.py`
+
+Tiga variabel, semuanya opsional. Tidak satu pun dipalsukan: batch Minggu 22.00 tetap jalan tanpa
+keduanya, menulis ke `media/published/recommendations.jsonl`, dan menyebut alasannya di log.
+
+| Variabel | Wajib | Default | Arti |
+| --- | --- | --- | --- |
+| `ANALYTICS_FEED` | tidak | — (kosong) | file export AniWatch (JSON): `{"generated_at", "episodes":[{"episode_id","views","watch_time_s","completions"}], "history":[{"user_id","episode_id"}]}`. Dibaca Analytics (drop-off), Recommendation (model) dan laporan mingguan Marketing |
+| `RECOMMENDATION_DB` | tidak | — (kosong) | file SQLite milik AniWatch; kalau diisi, batch menulis tabel `recommendations (user_id, episode_id, score, created_at)` (dibuat kalau belum ada). Kalau kosong → `media/published/recommendations.jsonl` |
+| `SEO_SITE_URL` | tidak | `CDN_BASE_URL`, lalu URL relatif | origin publik untuk `sitemap.xml`, `meta/<episode>.json` dan `structured-data.json` |
+
+`ANALYTICS_FEED` adalah **satu-satunya** jalan angka tontonan masuk ke fork ini: tidak ada API
+AniWatch yang bisa dipanggil dari sini. Tanpa file itu, Analytics tetap menulis snapshot dari data
+lokal (episode live, tiket, laporan user) dengan `source: "local"`, dan `insufficient` menyebut apa
+yang belum bisa dihitung — bukan angka karangan. Kanal sosial tidak butuh variabel baru:
+`DISCORD_WEBHOOK_URL` dan `TELEGRAM_*` di §3 dipakai SocialMedia (satu post per channel per
+episode), sedangkan X ditandai "belum diimplementasikan" karena bearer token hanya bisa baca.
+
 ---
 
 ## 4. `.env.example`
@@ -187,6 +205,11 @@ SUPPORT_FROM=support@aniwatch.example
 SUPPORT_FROM_NAME=AniWatch Support
 # SMTP_TIMEOUT_S=15
 # HERMES_OUTBOX=~/.hermes-office/outbox/replies.jsonl
+
+# ── Growth (W6) ────────────────────────────────────────────────────────────
+# ANALYTICS_FEED=~/.hermes-office/aniwatch-export.json
+# RECOMMENDATION_DB=~/.hermes-office/aniwatch.db
+# SEO_SITE_URL=https://aniwatch.example
 
 LOG_LEVEL=INFO
 
@@ -276,7 +299,9 @@ dijalankan terpisah); scheduler membaca env saat start.
 | Support lewat Gmail | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` | `check_new_emails` log sekali per jam, bukan tiap 5 menit |
 | Sales lewat HubSpot | `HUBSPOT_API_KEY` | `update_crm` jadi no-op + warning |
 | DesignAgent | `IMAGE_GEN_API_KEY` (+ `IMAGE_GEN_PROVIDER`) | berhenti di langkah pertama |
-| Notifier / SocialMedia | `DISCORD_WEBHOOK_URL`, `TELEGRAM_*`, `TWITTER_BEARER_TOKEN` | platform itu dilewati, yang lain tetap jalan |
+| Notifier / SocialMedia | `DISCORD_WEBHOOK_URL`, `TELEGRAM_*` | platform itu dilewati (`skipped` menyebut nama variabelnya), feed tetap ditulis |
+| Recommendation batch | `RECOMMENDATION_DB` | ditulis ke `media/published/recommendations.jsonl` |
+| Analytics / Marketing | `ANALYTICS_FEED` | hanya data lokal; angka tontonan dan drop-off dinyatakan belum ada |
 
 Aturan umum: integrasi opsional yang kosong **tidak** boleh menggagalkan agent lain, dan tidak boleh
 diam-diam (`except: pass`). Yang hilang hanya tool terkait, dan itu harus terlihat di bubble merah.

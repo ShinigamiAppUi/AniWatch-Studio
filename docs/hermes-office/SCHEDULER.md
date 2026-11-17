@@ -54,9 +54,10 @@ Catatan per job:
 - **`approval_sweep`** membuang keputusan approval yang tidak pernah diambil (TTL 24 jam), supaya
   store di memori tidak tumbuh. Ini bukan pengganti timeout agent: agent tetap timeout sendiri.
 
-### Status implementasi (W4)
+### Status implementasi (W4 → W6)
 
-Didaftarkan sekarang, karena kerjaannya sudah ada di `webhook_server/jobs.py`:
+Sebelas job di §2 semuanya terdaftar sejak W6. Tiga yang terakhir menunggu agent growth, dan
+sekarang kerjanya ada di `webhook_server/jobs.py`:
 
 | id | Fungsi | Catatan |
 | --- | --- | --- |
@@ -68,11 +69,14 @@ Didaftarkan sekarang, karena kerjaannya sudah ada di `webhook_server/jobs.py`:
 | `approval_sweep` | `sweep_approvals` | TTL 24 jam, angka yang sama dengan `approval.TTL_S` |
 | `db_backup` | `backup_databases` | `~/.hermes-office/backups/YYYY-MM-DD/` |
 | `handoff_check` | `check_handoffs` | tiap 15 menit; **satu** card untuk semua handoff telat, tiga opsi (eskalasi / perpanjang / abaikan) |
+| `weekly_report` | `run_marketing_report` | Senin 09.00; `run_trigger('weekly_analytics')` → Orchestrator → Marketing; menulis `media/published/reports/weekly-<ISO week>.md` |
+| `cache_warmer` | `run_cache_warmer` | tiap hari 17.00; episode live terbaru di-`GET` dari `CDN_BASE_URL`; tanpa CDN → `warmed: 0` + alasan |
+| `recommendation_batch` | `run_recommendation_batch` | Minggu 22.00; co-view dari `ANALYTICS_FEED`, ditulis ke `RECOMMENDATION_DB` (tabel `recommendations`) atau `media/published/recommendations.jsonl` |
 
-Belum didaftarkan, dan **sengaja tidak** didaftarkan sebagai job kosong: `weekly_report`,
-`cache_warmer`, `recommendation_batch` (W6). `start_scheduler()` menulis satu baris per job itu saat start, dan
-`GET /health` mengembalikan daftarnya di `pending_jobs` beserta alasannya — jadi yang belum ada
-terlihat sebagai belum ada. Zona waktu: `HERMES_TZ` (default `Asia/Jakarta`).
+`PENDING_JOBS` tetap ada dan **kosong** sekarang. Itu memang gunanya: job yang kerjanya belum ada
+ditulis di sana beserta alasannya, `start_scheduler()` menulis satu baris per entri saat start, dan
+`GET /health` mengembalikannya di `pending_jobs` — jadi yang belum ada terlihat sebagai belum ada,
+bukan job kosong yang terlihat hidup. Zona waktu: `HERMES_TZ` (default `Asia/Jakarta`).
 
 ---
 
@@ -122,6 +126,11 @@ def start_scheduler() -> BackgroundScheduler:
     s.add_job(_guard(sweep_approvals), IntervalTrigger(hours=1), id="approval_sweep", **COMMON)
     s.add_job(_guard(check_handoffs), IntervalTrigger(minutes=15), id="handoff_check", **COMMON)
     s.add_job(_guard(backup_databases), "cron", hour=2, id="db_backup", **COMMON)
+    s.add_job(_guard(run_marketing_report), "cron", day_of_week="mon", hour=9,
+              id="weekly_report", **COMMON)
+    s.add_job(_guard(run_cache_warmer), "cron", hour=17, id="cache_warmer", **COMMON)
+    s.add_job(_guard(run_recommendation_batch), "cron", day_of_week="sun", hour=22,
+              id="recommendation_batch", **COMMON)
 
     s.start()
     _sched = s
@@ -195,12 +204,17 @@ def run_episode_scheduler():
     from hermes_bridge.agents.episode_scheduler import publish_due_episodes
     publish_due_episodes()          # satu putaran, bukan loop while True
 
+def run_marketing_report():
+    # Lewat Orchestrator, seperti baris tabel §2: trigger, bukan import agent
+    from . import triggers
+    triggers.run_trigger("weekly_analytics", {"source": "scheduler"}, "scheduler")
+
 def run_cache_warmer():
-    from hermes_bridge.agents.cache_warmer import CacheWarmerAgent
+    from hermes_agents.cache_warmer import CacheWarmerAgent
     CacheWarmerAgent().run()
 
 def run_recommendation_batch():
-    from hermes_bridge.agents.recommendation import RecommendationAgent
+    from hermes_agents.recommendation import RecommendationAgent
     RecommendationAgent().run_batch()
 
 def cleanup_shared_context():

@@ -1,9 +1,13 @@
-"""notifier.py - tell subscribers an episode is live.
+"""notifier.py - tell subscribers an episode is live: the feed and the log.
 
 Always: one line in `media/published/notifications.jsonl` and a rebuilt
 `media/published/feed.xml` (RSS 2.0, the same file the site's feed can point
-at). Discord and Telegram are posted only when their env vars are set
-(ENV-VARS.md §3): a missing webhook is skipped with a note, never faked.
+at).
+
+The platform posts are SocialMedia's job (`social.py`, W6): one message per
+channel per episode belongs to the agent whose desk is marked 📱, and keeping it
+out of here is what stops the same link being posted twice. This module still
+reports what it wrote, so a run says `feed`/`log` and nothing it did not do.
 """
 
 from __future__ import annotations
@@ -59,40 +63,13 @@ def _rebuild_feed(item: dict) -> None:
     )
 
 
-def _post_discord(text: str) -> bool:
-    url = config.discord_webhook()
-    if not url:
-        return False
-    import httpx
-    try:
-        res = httpx.post(url, json={'content': text[:1900]}, timeout=15)
-        res.raise_for_status()
-        return True
-    except Exception as err:  # noqa: BLE001 - one channel down is not an episode failure
-        log.warning('notifier: Discord gagal: %s', err)
-        return False
-
-
-def _post_telegram(text: str) -> bool:
-    token, chat = config.telegram()
-    if not (token and chat):
-        return False
-    import httpx
-    try:
-        res = httpx.post(
-            f'https://api.telegram.org/bot{token}/sendMessage',
-            json={'chat_id': chat, 'text': text[:4000]},
-            timeout=15,
-        )
-        res.raise_for_status()
-        return True
-    except Exception as err:  # noqa: BLE001
-        log.warning('notifier: Telegram gagal: %s', err)
-        return False
-
-
 def notify(episode: dict) -> dict:
-    """Announce one live episode. Returns what actually went out."""
+    """Write the feed entry and the subscriber log for one live episode.
+
+    Returns `{feed, log, title}`: the two files that were written, and the line
+    SocialMedia turns into the channel post (`social.announcement` rebuilds it
+    from the episode, so the two never disagree about the link).
+    """
     item = {
         'episode_id': episode['episode_id'],
         'title': f'{episode.get("title") or episode.get("anime_title") or episode["episode_id"]} '
@@ -105,10 +82,8 @@ def notify(episode: dict) -> dict:
     with _log_path().open('a', encoding='utf-8') as fh:
         fh.write(json.dumps(item, ensure_ascii=False) + '\n')
     _rebuild_feed(item)
-    text = f'🎬 {item["title"]} sudah tayang: {_public_url(item["encoded_path"])}'
     return {
         'feed': str(_feed_path()),
         'log': str(_log_path()),
-        'discord': _post_discord(text),
-        'telegram': _post_telegram(text),
+        'title': item['title'],
     }

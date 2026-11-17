@@ -208,9 +208,18 @@ agent berhenti dengan `agent_error` yang jelas, bukan diam.
 
 **Key:** `Marketing` · **Rumah:** Business Suite · **Tools:** `draft_post`, `schedule_post`,
 `fetch_analytics`, `generate_report`
-**Trigger:** `analytics_ready`, `content_schedule`; `weekly_analytics` (Senin 09.00)
-**Output:** konten terpublish, weekly report
+**Trigger:** `weekly_analytics` (Senin 09.00, job `weekly_report`); `analytics_ready` tetap milik
+Analytics, `content_schedule` milik SocialMedia
+**Output:** weekly report (file markdown + ringkasan Discord)
 **Handoff:** → Support (`customer_onboarding`: plan, channel akuisisi)
+
+**Implementasi W6:** `hermes_agents/marketing.py`, `MarketingAgent.weekly_report()` dipanggil lewat
+`run_trigger('weekly_analytics')` (bukan import agent), menulis
+`media/published/reports/weekly-<ISO week>.md` dari `growth_data.snapshot()` dan mengirim satu baris
+ringkasan ke Discord kalau `DISCORD_WEBHOOK_URL` diisi. Setiap bagian laporan menyebut sumber
+angkanya (`local` atau `feed+local`); bagian tontonan menyatakan belum ada kalau `ANALYTICS_FEED`
+kosong. `draft_post`/`schedule_post` yang berdiri sendiri belum dipakai — belum ada penjadwal
+konten di luar episode.
 
 #### ⚙️ Ops — Generic
 
@@ -265,7 +274,7 @@ Pipeline episode bersifat sequential dan dijaga Orchestrator:
 ```
 Scraper → Metadata → Encoder → Subtitle → TranslationAgent → QualityChecker
         → EpisodeScheduler ──(embargo habis)──▶ live
-        → Notifier + SocialMedia
+        → Notifier (feed) → SocialMedia (Discord/Telegram) → SEO (meta + sitemap)
 ```
 
 #### 🕷️ Scraper
@@ -367,15 +376,23 @@ skor 0 berarti "tidak diterjemahkan", bukan "mirip". `deepl`/`openai` tanpa key 
 **Key:** `Notifier` · **Tools:** `push_notif`, `update_rss`, `update_feed`
 **Trigger:** episode live · **Output:** subscriber dinotif, RSS/feed terupdate
 **Handoff:** → SocialMedia (`announce_episode`)
-**Implementasi W3:** selalu menulis `media/published/notifications.jsonl` + `feed.xml` (RSS 2.0).
-Discord/Telegram hanya diposting kalau `DISCORD_WEBHOOK_URL` / `TELEGRAM_*` diisi; kalau kosong,
-dilewati dan `notified_channels` mencatat channel yang benar-benar terkirim.
+**Implementasi W3/W6:** selalu menulis `media/published/notifications.jsonl` + `feed.xml` (RSS 2.0).
+Sejak W6 **posting platform adalah tugas SocialMedia** (`social.py`): Notifier hanya menulis feed dan
+log, dan `pipeline.announce` menjalankan tiga karakter berurutan — Notifier (feed), SocialMedia
+(satu post per channel), SEO (meta + sitemap). Pemisahan ini yang membuat satu episode tidak
+diumumkan dua kali di Discord yang sama. `notified_channels` dan `notified_skipped` diisi dari
+hasil SocialMedia, termasuk alasannya saat channel kosong.
 
 #### ⚡ CacheWarmer
 
 **Key:** `CacheWarmer` · **Tools:** `get_trending`, `warm_cdn_cache`
 **Trigger:** harian 17.00 (langsung dari scheduler) · **Output:** CDN hangat sebelum prime time
 **Batas:** tidak mem-publish apa pun; hanya cache.
+
+**Implementasi W6:** `hermes_agents/cache_warmer.py`. `get_trending` = episode `live` terbaru dari
+`episode_schedule` — fork ini tidak punya angka tontonan untuk merangking, jadi "trending" berarti
+"paling baru", bukan tebakan. `warm_cdn_cache` melakukan `GET` sungguhan per file ke `CDN_BASE_URL`;
+tanpa variabel itu hasilnya `warmed: 0` + alasan, bukan "cache hangat" palsu.
 
 ---
 
@@ -421,31 +438,68 @@ laporan → triage_report
 #### 📊 Analytics
 
 **Key:** `Analytics` · **Tools:** `fetch_watch_data`, `detect_dropoff`, `generate_report`
-**Trigger:** `weekly_analytics` (Senin), `analytics_ready` · **Output:** trending, watch time,
-drop-off per episode
+**Trigger:** `analytics_ready` · **Output:** snapshot mingguan + daftar drop-off
+
+**Implementasi W6:** `hermes_agents/analytics.py`, dengan `growth_data.py` sebagai sumber angka.
+Dua sumber, dan hasilnya selalu menyebut yang dipakai: export AniWatch (`ANALYTICS_FEED`) dan DB fork
+ini sendiri (`episode_schedule`, `tickets`, `user_reports`). Tanpa export, `source: "local"` dan
+`insufficient` menyebut bahwa tontonan/watch time/drop-off belum bisa dihitung — tidak ada angka
+karangan. Drop-off hanya dilaporkan kalau `views ≥ 20` dan penyelesaian < 50%; baris tanpa `views`
+dilewati, karena metrik yang tidak ada bukan nol. Snapshot ditulis ke
+`media/published/analytics/YYYY-MM-DD.json`.
 
 #### 🔎 SEO
 
 **Key:** `SEO` · **Tools:** `update_meta`, `update_sitemap`, `add_structured_data`
-**Trigger:** anime baru ditambah ke DB · **Output:** meta, sitemap, structured data
+**Trigger:** akhir pipeline episode (episode baru live) · **Output:** meta per episode, `sitemap.xml`,
+`structured-data.json`
+
+**Implementasi W6:** `hermes_agents/seo.py`. Semuanya membaca `episode_schedule` dengan `status='live'`
+— episode `cancelled` **tidak** masuk sitemap — dan ditulis ke folder yang sama dengan `feed.xml`:
+`media/published/meta/<episode_id>.json`, `sitemap.xml`, `structured-data.json` (JSON-LD
+`TVEpisode`). Fork ini tidak meng-upload apa pun: `base_url` di hasil adalah `SEO_SITE_URL`, atau
+`CDN_BASE_URL`, atau `relative` — dan situs yang mengambil file itu.
 
 #### 📱 SocialMedia
 
-**Key:** `SocialMedia` · **Tools:** `post_discord`, `post_twitter`, `post_instagram`,
-`post_telegram`
-**Trigger:** `announce_episode` setelah episode live · **Output:** pengumuman ke semua platform
-**Catatan:** tiap platform opsional; yang token-nya kosong dilewati, bukan menggagalkan agent.
+**Key:** `SocialMedia` · **Tools:** `post_discord`, `post_telegram`, `post_twitter`,
+`announce_episode`
+**Trigger:** akhir pipeline episode; `announce_episode` dan `content_schedule` dari webhook
+**Output:** satu pengumuman per platform per episode
+
+**Implementasi W6:** `hermes_agents/social.py` + `channels.py`. Setiap platform mengembalikan
+`{posted, reason}`; variabel yang kosong jadi `skipped` yang menyebut namanya. Satu episode = satu
+post per channel: yang sudah terkirim dicatat di SharedContext (`social:<episode_id>`), jadi trigger
+`announce_episode` yang datang setelah publish tidak mengulang post, sementara kiriman yang gagal
+tidak dicatat sehingga percobaan berikutnya masih boleh. X/Twitter **belum diimplementasikan**
+(posting butuh OAuth 2.0 user context; bearer token hanya untuk baca) dan itu tertulis di hasilnya,
+bukan didiamkan. Instagram belum punya jalur API di fork ini.
 
 #### 🎯 Recommendation
 
 **Key:** `Recommendation` · **Tools:** `fetch_history`, `run_model`, `save_recs`
-**Trigger:** batch Minggu 22.00 (langsung dari scheduler) · **Output:** rekomendasi personal
-**Catatan:** menulis ke DB AniWatch (di luar fork); kantor hanya memantulkan karakternya.
+**Trigger:** batch Minggu 22.00 (langsung dari scheduler) · **Output:** rekomendasi personal per user
+
+**Implementasi W6:** `hermes_agents/recommendation.py`. Modelnya co-view yang bisa dijelaskan: user
+yang menonton episode sama dianggap pasangan, skor = berapa co-viewer menonton episode itu, dan
+episode yang sudah ditonton tidak pernah direkomendasikan. Hasil ditulis ke `RECOMMENDATION_DB`
+(tabel `recommendations`, dibuat kalau belum ada) atau, kalau variabel itu kosong, ke
+`media/published/recommendations.jsonl`. Hasilnya menyebut `target` sehingga tidak ada klaim "sudah
+tersimpan di DB AniWatch" tanpa bukti.
 
 #### 💌 Retention
 
 **Key:** `Retention` · **Tools:** `segment_users`, `draft_email`, `send_campaign`
-**Trigger:** `retention_check` · **Output:** campaign re-engagement terkirim
+**Trigger:** `retention_check` · **Output:** campaign re-engagement terkirim (SMTP) atau dilewati
+dengan alasan
+
+**Implementasi W6:** `hermes_agents/retention.py`. Segmen = baris `subscription_status` yang sudah
+kedaluwarsa atau sedang masa tenggang (ditulis PaymentAgent, W9 — sebelum itu segmennya kosong dan
+agent mengatakannya). Surat hanya dikirim ke user yang **id-nya memang alamat email**: tabel itu
+tidak punya kolom `email`, dan menebak alamat orang lain lebih buruk daripada melewatinya. Campaign
+terkirim dicatat (`retention:<user_id>`) dan tidak diulang dalam 7 hari; yang gagal tidak dicatat,
+jadi dicoba lagi putaran berikutnya. Pengiriman lewat `hermes_agents/mailer.py` yang sama dengan
+Support.
 
 ---
 

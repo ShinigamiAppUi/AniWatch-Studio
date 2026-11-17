@@ -1,5 +1,47 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 3.7 — 17 Nov 2026 (W6: growth)
+
+### Ditambahkan
+
+- `hermes_agents/growth_data.py`: satu sumber angka growth dengan **dua sumber yang selalu disebut** —
+  export AniWatch (`ANALYTICS_FEED`: `episodes` + `history`) dan DB fork ini (`episode_schedule`,
+  `tickets`, `user_reports`). Drop-off hanya dihitung kalau `views ≥ 20` dan penyelesaian < 50%;
+  baris tanpa metrik dilewati, bukan dianggap nol.
+- `hermes_agents/analytics.py` (📊 `analytics_ready`): snapshot `media/published/analytics/<tanggal>.json`.
+  Tanpa export: `source: "local"` + `insufficient` yang menyebut apa yang belum bisa dihitung.
+- `hermes_agents/seo.py` (🔎 akhir pipeline): `meta/<episode>.json`, `sitemap.xml` (hanya
+  `status='live'`) dan `structured-data.json` (JSON-LD `TVEpisode`), dengan `base_url` jujur
+  (`SEO_SITE_URL` → `CDN_BASE_URL` → `relative`).
+- `hermes_agents/social.py` + `channels.py` (📱 akhir pipeline, `announce_episode`,
+  `content_schedule`): satu post per channel per episode, `{posted, reason}` per platform, dedupe di
+  SharedContext `social:<episode_id>`. X/Twitter ditandai belum diimplementasikan, bukan didiamkan.
+- `hermes_agents/recommendation.py` (🎯 Minggu 22.00): model co-view, tulis ke `RECOMMENDATION_DB`
+  (tabel `recommendations`) kalau diisi, kalau tidak ke `media/published/recommendations.jsonl`.
+- `hermes_agents/retention.py` (💌 `retention_check`): segmen `subscription_status` (kedaluwarsa /
+  masa tenggang), surat lewat SMTP, cooldown 7 hari per user, user tanpa alamat email dilewati.
+- `hermes_agents/cache_warmer.py` (⚡ 17.00): `GET` sungguhan per file episode live ke `CDN_BASE_URL`;
+  tanpa CDN → `warmed: 0` + alasan.
+- `hermes_agents/marketing.py` (📣 `weekly_analytics`): laporan mingguan
+  `media/published/reports/weekly-<ISO week>.md` + ringkasan Discord.
+
+### Diubah
+
+- `pipeline.announce` menjalankan **tiga** karakter: Notifier (feed + `notifications.jsonl`),
+  SocialMedia (satu post per channel), SEO (meta + sitemap). `notifier.notify()` tidak lagi mem-posting
+  channel — itu yang membuat satu episode tidak diumumkan dua kali; `notified_channels` dan
+  `notified_skipped` kini diisi dari hasil SocialMedia.
+- `webhook_server/triggers.py`: `AGENT_HANDLERS` menambah `analytics_ready`, `weekly_analytics`,
+  `content_schedule`, `announce_episode`, `retention_check`. Sisa yang hanya menggambar karakter:
+  trigger Sales (agent-nya belum ada).
+- Scheduler: **11 job** hidup (tambah `weekly_report`, `cache_warmer`, `recommendation_batch`),
+  `PENDING_JOBS` **kosong**.
+- ENV-VARS.md §3d + `.env.example`: `ANALYTICS_FEED`, `RECOMMENDATION_DB`, `SEO_SITE_URL`.
+- DB-SCHEMA.md §15: file growth + tabel `recommendations` milik AniWatch (di luar DB fork).
+- Selfcheck: **139 PASS / 0 FAIL** (25 cek W6 baru).
+
+---
+
 ## Rev 3.6 — 17 Nov 2026 (W8: Orchestrator + handoff)
 
 ### Ditambahkan

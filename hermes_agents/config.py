@@ -50,3 +50,18 @@ def discord_webhook() -> str:
 
 def telegram() -> tuple[str, str]:
     return (os.environ.get('TELEGRAM_BOT_TOKEN') or '').strip(), (os.environ.get('TELEGRAM_CHANNEL_ID') or '').strip()
+
+
+def analytics_feed() -> str:
+    """AniWatch's export file: views, watch time and per-user history (W6)."""
+    return (os.environ.get('ANALYTICS_FEED') or '').strip()
+
+
+def recommendation_db() -> str:
+    """AniWatch's own SQLite file; the batch writes to it when it is set."""
+    return (os.environ.get('RECOMMENDATION_DB') or '').strip()
+
+
+def seo_site_url() -> str:
+    """Public origin for sitemap/meta links, when the site is not the CDN."""
+    return (os.environ.get('SEO_SITE_URL') or '').strip().rstrip('/')

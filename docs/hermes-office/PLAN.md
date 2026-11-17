@@ -136,14 +136,36 @@ diteruskan ke Support; tiket lewat SLA memunculkan **satu** card dengan 3 opsi.
 
 ### W6 — Growth
 
-- Analytics, SEO, SocialMedia, Recommendation, Retention
-- SocialMedia tersambung ke akhir pipeline episode
+- [x] Analytics, SEO, SocialMedia, Recommendation, Retention (`hermes_agents/analytics.py`,
+  `seo.py`, `social.py`, `recommendation.py`, `retention.py`) + `growth_data.py` sebagai sumber
+  angka dan `channels.py` untuk platform
+- [x] SocialMedia tersambung ke akhir pipeline episode (`pipeline.announce`: Notifier → SocialMedia
+  → SEO), satu post per channel per episode
+- [x] Job yang menunggu W6 didaftarkan: `weekly_report` (Senin 09.00, lewat Orchestrator),
+  `cache_warmer` (17.00), `recommendation_batch` (Minggu 22.00). `PENDING_JOBS` kini kosong
 
 **Deliverable:** episode baru otomatis diumumkan ke Discord/Telegram.
 
 **Kriteria terima:** satu episode live menghasilkan satu post Discord + satu post Telegram dalam
 < 60 detik; Recommendation batch jalan Minggu 22.00 dan menulis rekomendasinya ke DB AniWatch
 (di luar fork ini — fork hanya memantulkan karakternya di kantor).
+
+**Status W6:** selesai. Yang **tidak** dipalsukan, dan itu terlihat di hasil agent:
+
+- Angka tontonan hanya datang dari export AniWatch (`ANALYTICS_FEED`). Tanpa file itu, Analytics
+  menulis snapshot data lokal dengan `source: "local"` dan daftar `insufficient`; drop-off butuh
+  `views ≥ 20`, dan baris tanpa `completions` tidak dianggap nol.
+- Post platform sungguhan lewat `DISCORD_WEBHOOK_URL` / `TELEGRAM_*`, satu per channel per episode
+  (dedupe di SharedContext `social:<episode_id>`). X/Twitter ditandai **belum diimplementasikan**
+  (bearer token hanya bisa baca), Instagram belum punya jalur API.
+- `recommendation_batch` menulis ke `RECOMMENDATION_DB` kalau diisi, kalau tidak ke
+  `media/published/recommendations.jsonl`; `target` di hasil menyebut yang mana.
+- SEO hanya menulis file (`sitemap.xml`, `meta/`, `structured-data.json`) di folder yang sama dengan
+  `feed.xml`; meng-upload ke situs bukan tugas fork ini, dan `base_url` menyebut `relative` kalau
+  `SEO_SITE_URL`/`CDN_BASE_URL` kosong.
+- `cache_warmer` melakukan `GET` sungguhan ke `CDN_BASE_URL`; tanpa CDN hasilnya `warmed: 0` + alasan.
+- `retention_check` mengirim lewat SMTP dan hanya ke user yang id-nya alamat email (tabel
+  `subscription_status` tidak punya kolom `email`); pengiriman yang sama tidak diulang dalam 7 hari.
 
 ### W7 — Premium pipeline
 

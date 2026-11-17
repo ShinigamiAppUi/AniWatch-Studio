@@ -25,7 +25,7 @@ from pathlib import Path
 
 from hermes_bridge.env import load_env
 
-from . import config, media, store
+from . import config, media, seo, social, store
 from .base import Agent
 from .episode_scheduler import publish_due_episodes, schedule_episode
 from .notifier import notify
@@ -195,15 +195,30 @@ def schedule(episode_id: str, embargo_seconds: float) -> dict:
 
 
 def announce(episode_id: str) -> dict:
+    """Three characters at the end of the pipeline (W6).
+
+    Notifier writes the feed and the subscriber log; SocialMedia posts the one
+    announcement per channel; SEO writes the episode's meta, the sitemap and its
+    structured data. They are separate steps on purpose: a channel that is down
+    must not cost the feed entry or the crawlable page.
+    """
+    ep = store.get_episode(episode_id) or {}
     with Agent('Notifier', f'Umumkan {episode_id}') as a:
-        ep = store.get_episode(episode_id) or {}
         a.update('push_notif', tool='push_notif')
         result = notify({**ep, 'episode_id': episode_id})
         a.update('update_rss' if result['feed'] else 'rss gagal', tool='update_rss')
-        channels = [name for name in ('discord', 'telegram') if result[name]]
-        return store.update_episode(episode_id, {
-            'status': 'live', 'notified': True, 'notified_channels': channels,
-        }, 'Notifier')
+
+    with Agent('SocialMedia', f'Umumkan {episode_id}') as a:
+        posted = social.SocialMediaAgent().announce_episode({**ep, 'episode_id': episode_id}, char=a)
+        a.update(f"post: {', '.join(posted['posted']) or 'tidak ada channel'}", tool='post_discord')
+
+    with Agent('SEO', f'Meta & sitemap {episode_id}') as a:
+        seo.SEOAgent().update_site({**ep, 'episode_id': episode_id}, char=a)
+
+    return store.update_episode(episode_id, {
+        'status': 'live', 'notified': True, 'notified_channels': posted['posted'],
+        'notified_skipped': posted['skipped'],
+    }, 'Notifier')
 
 
 # ---------------------------------------------------------------------------

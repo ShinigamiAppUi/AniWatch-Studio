@@ -454,3 +454,36 @@ CREATE INDEX IF NOT EXISTS idx_moderation_user ON moderation_events (user_id, cr
 Aturan yang dipakai `moderator.py`: `piracy` dan `abuse` → `ban`, `spam` dan `spoiler` → `flag`.
 Status ban dihitung dari baris **terakhir** milik `user_id` (`ModeratorAgent.is_banned`), jadi
 "unban" nanti cukup menambah baris baru — bukan menghapus yang lama.
+
+---
+
+## 15. Data growth (W6) — file dan satu tabel milik AniWatch
+
+Tidak ada tabel baru di `hermes.db` untuk W6. Analytics menulis file, bukan baris:
+
+| Berkas | Ditulis oleh | Isi |
+| --- | --- | --- |
+| `media/published/analytics/YYYY-MM-DD.json` | Analytics | snapshot `{generated_at, source, feed, local, dropoffs, insufficient}` |
+| `media/published/reports/weekly-<ISO week>.md` | Marketing | laporan mingguan, tiap bagian menyebut sumber angkanya |
+| `media/published/meta/<episode_id>.json` | SEO | `<title>`/og per episode |
+| `media/published/sitemap.xml` | SEO | hanya episode `status='live'` |
+| `media/published/structured-data.json` | SEO | JSON-LD `TVEpisode` |
+| `media/published/recommendations.jsonl` | Recommendation | dipakai kalau `RECOMMENDATION_DB` kosong |
+
+Satu tabel ditulis **di luar** DB ini, di file `RECOMMENDATION_DB` milik AniWatch. Batch membuatnya
+kalau belum ada dan hanya pernah `INSERT OR REPLACE`:
+
+```sql
+CREATE TABLE IF NOT EXISTS recommendations (
+    user_id    TEXT NOT NULL,
+    episode_id TEXT NOT NULL,
+    score      REAL NOT NULL,
+    created_at REAL NOT NULL,
+    PRIMARY KEY (user_id, episode_id)
+);
+```
+
+**Writer:** `RecommendationAgent.save_recs()` (Minggu 22.00). · **Reader:** situs AniWatch.
+**Umur data:** satu baris per (user, episode), ditimpa tiap batch — skor lama tidak menumpuk.
+Sumber angka tontonan (`ANALYTICS_FEED`) juga file milik situs, bukan tabel di fork ini
+(ENV-VARS.md §3d); tidak ada DDL baru yang perlu dimigrasi.

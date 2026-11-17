@@ -20,6 +20,7 @@ tests/*.ts).
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import sys
@@ -62,6 +63,16 @@ def main() -> int:
         'SMTP_PORT': '',
         'SUPPORT_FROM': '',
         'HERMES_OUTBOX': str(tmp / 'outbox' / 'replies.jsonl'),
+        # Growth (W6): no real post leaves this check either, and the two exports
+        # start empty so the "no data yet" path is the one exercised first
+        'DISCORD_WEBHOOK_URL': '',
+        'TELEGRAM_BOT_TOKEN': '',
+        'TELEGRAM_CHANNEL_ID': '',
+        'TWITTER_BEARER_TOKEN': '',
+        'ANALYTICS_FEED': '',
+        'RECOMMENDATION_DB': '',
+        'SEO_SITE_URL': '',
+        'CDN_BASE_URL': '',
     })
     (tmp / 'glossary.json').write_text(
         '{"Selamat datang di episode baru":"Welcome to the new episode",'
@@ -167,6 +178,10 @@ def main() -> int:
     check('translation scored 1.0', tracks.get('en', {}).get('qa_score') == 1.0)
     check('feed written', (config.media_root() / 'published' / 'feed.xml').exists())
     check('notification logged', (config.media_root() / 'published' / 'notifications.jsonl').exists())
+    check('w6: a live episode is announced with no channel configured, and says so',
+          ep.get('notified') is True and ep.get('notified_channels') == []
+          and 'DISCORD_WEBHOOK_URL kosong' in (ep.get('notified_skipped') or {}).get('discord', ''),
+          f'{ep.get("notified_channels")} {ep.get("notified_skipped")}')
 
     # 3. Duplicate guard ---------------------------------------------------
     try:
@@ -283,14 +298,15 @@ def main() -> int:
     sched1 = start_scheduler()
     sched2 = start_scheduler()
     ids = sorted(job.id for job in sched1.get_jobs())
-    check('w4: the scheduler registers the eight jobs that exist',
-          ids == ['approval_sweep', 'db_backup', 'email_check', 'episode_embargo', 'handoff_check',
-                  'ops_check', 'shared_context_cleanup', 'sla_check'], str(ids))
-    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 8)
+    check('w6: the scheduler registers all 11 jobs SCHEDULER.md lists',
+          ids == ['approval_sweep', 'cache_warmer', 'db_backup', 'email_check', 'episode_embargo',
+                  'handoff_check', 'ops_check', 'recommendation_batch', 'shared_context_cleanup',
+                  'sla_check', 'weekly_report'], str(ids))
+    check('w4: starting twice does not double the jobs', sched1 is sched2 and len(ids) == 11)
     check('w4: /health can list the running jobs',
-          len(registered_jobs()) == 8 and len(pending_jobs()) == 3)
-    check('w4: the three unbuilt jobs are named, not faked',
-          len(PENDING_JOBS) == 3 and all(reason.strip() for reason in PENDING_JOBS.values()))
+          len(registered_jobs()) == 11 and pending_jobs() == [])
+    check('w6: no job is parked in PENDING_JOBS now that the growth agents exist',
+          PENDING_JOBS == {})
     shutdown_scheduler()
     check('w4: shutdown leaves no scheduler running', registered_jobs() == [])
 
@@ -627,9 +643,8 @@ def main() -> int:
           and inbox_mod.configured() is False)
     os.environ['IMAP_HOST'] = 'imap.example'
     pending_ids = [job['id'] for job in pending_jobs()]
-    check('w5: email_check and ops_check are registered, leaving three pending',
-          'email_check' not in pending_ids and 'ops_check' not in pending_ids
-          and len(pending_ids) == 3, str(pending_ids))
+    check('w5: email_check and ops_check are registered',
+          'email_check' not in pending_ids and 'ops_check' not in pending_ids, str(pending_ids))
 
     # 9. W8: protokol handoff + graph Orchestrator ----------------------------
     from hermes_agents import orchestrator as orch
@@ -748,8 +763,154 @@ def main() -> int:
           dropped['handled'] == 1 and ignored not in ho.pending(context=ctx), str(dropped))
 
     pending_ids = [job['id'] for job in pending_jobs()]
-    check('w8: handoff_check is registered, leaving three pending jobs',
-          'handoff_check' not in pending_ids and len(pending_ids) == 3, str(pending_ids))
+    check('w8: handoff_check is registered',
+          'handoff_check' not in pending_ids, str(pending_ids))
+
+    # 10. W6: growth — Analytics, SEO, SocialMedia, Recommendation, Retention,
+    #     CacheWarmer and the three jobs that were waiting for them -------------
+    from hermes_agents import analytics, cache_warmer, marketing, recommendation
+    from hermes_agents import retention as retention_mod
+    from hermes_agents import seo as seo_mod
+    from hermes_agents import social as social_mod
+
+    local_snap = analytics.AnalyticsAgent(con=con).generate_report(now=now)
+    check('w6: analytics names its source and writes a snapshot file',
+          local_snap['source'] == 'local' and local_snap['feed'] is None
+          and Path(local_snap['path']).exists(), str(local_snap['source']))
+    check('w6: without an export the missing watch data is named, not invented',
+          local_snap['dropoffs'] == []
+          and any('ANALYTICS_FEED' in line for line in local_snap['insufficient']))
+
+    feed_file = tmp / 'analytics.json'
+    feed_file.write_text(json.dumps({
+        'generated_at': now,
+        'episodes': [
+            {'episode_id': 'feed-a', 'views': 100, 'completions': 90},
+            {'episode_id': 'feed-b', 'views': 100, 'completions': 20},
+            {'episode_id': 'feed-c', 'views': 5, 'completions': 0},
+            {'episode_id': 'feed-d'},
+        ],
+        'history': [
+            {'user_id': 'u-a', 'episode_id': 'feed-a'},
+            {'user_id': 'u-a', 'episode_id': 'feed-b'},
+            {'user_id': 'u-b', 'episode_id': 'feed-a'},
+            {'user_id': 'u-b', 'episode_id': 'feed-c'},
+            {'user_id': 'u-c', 'episode_id': 'feed-a'},
+        ],
+    }), encoding='utf-8')
+    os.environ['ANALYTICS_FEED'] = str(feed_file)
+    grown = analytics.AnalyticsAgent(con=con).generate_report(now=now)
+    check('w6: with the export, only the real drop-off is flagged',
+          [row['episode_id'] for row in grown['dropoffs']] == ['feed-b']
+          and grown['source'] == 'feed+local', str(grown['dropoffs']))
+    check('w6: a low view count is not a drop-off and a missing metric is not a zero',
+          all(row['episode_id'] not in ('feed-c', 'feed-d') for row in grown['dropoffs']),
+          str(grown['dropoffs']))
+
+    site = seo_mod.SEOAgent(con=con).update_site(
+        {'episode_id': 'feed-a', 'anime_title': 'Feed Show', 'episode_number': 1}, now=now)
+    sitemap = Path(site['sitemap']).read_text(encoding='utf-8')
+    structured = json.loads(Path(site['structured_data']).read_text(encoding='utf-8'))
+    check('w6: the sitemap lists live episodes and never a cancelled one',
+          'selfcheck-w5-live' in sitemap and 'selfcheck-cancel-s01e01' not in sitemap
+          and 'selfcheck-job-cancel-s01e01' not in sitemap, site['sitemap'])
+    check('w6: meta + structured data are written, with an honest base url',
+          Path(site['meta']).exists() and len(structured) >= 2
+          and site['base_url'] == 'relative', str(site['base_url']))
+
+    social_agent = social_mod.SocialMediaAgent(context=ctx)
+    quiet = social_agent.announce_episode(
+        {'episode_id': 'feed-a', 'title': 'Feed Show', 'episode_number': 1})
+    check('w6: with no webhook the post is skipped with its reason, never claimed',
+          quiet['posted'] == [] and 'DISCORD_WEBHOOK_URL kosong' in quiet['skipped']['discord']
+          and 'belum diimplementasikan' in quiet['skipped']['twitter'], str(quiet))
+    ctx.set(social_mod.key('feed-a'), {'discord': True, 'at': now}, 'SocialMedia')
+    again = social_agent.post_all('halo', episode_id='feed-a')
+    check('w6: a channel that already has this episode is not posted twice',
+          again['skipped']['discord'] == 'sudah diposting untuk episode ini', str(again))
+
+    from hermes_agents.notifier import notify
+
+    written = notify({'episode_id': 'feed-a', 'title': 'Feed Show', 'episode_number': 1,
+                      'encoded_path': str(tmp / 'feed-a.mp4')})
+    check('w6: Notifier writes the feed and leaves the platforms to SocialMedia',
+          set(written) == {'feed', 'log', 'title'} and Path(written['feed']).exists(), str(written))
+
+    recs = recommendation.RecommendationAgent(feed_path=feed_file).run_batch(now=now)
+    rec_rows = [json.loads(line) for line in Path(recs['path']).read_text(encoding='utf-8').splitlines()]
+    by_user = {row['user_id']: row['episode_id'] for row in rec_rows}
+    check('w6: the batch recommends an unwatched episode and never one already watched',
+          recs['target'] == 'file' and recs['users'] == 3 and by_user.get('u-a') == 'feed-c'
+          and all(row['episode_id'] != 'feed-a' for row in rec_rows), str(recs))
+
+    os.environ['RECOMMENDATION_DB'] = str(tmp / 'aniwatch.db')
+    to_db = recommendation.RecommendationAgent(feed_path=feed_file).run_batch(now=now)
+    ani = sqlite3.connect(str(tmp / 'aniwatch.db'))
+    stored = ani.execute(
+        "SELECT COUNT(*) FROM recommendations WHERE user_id = 'u-a' AND episode_id = 'feed-c'"
+    ).fetchone()[0]
+    ani.close()
+    check("w6: with RECOMMENDATION_DB set the batch writes AniWatch's own table",
+          to_db['target'] == 'db' and stored == 1, f'{to_db} stored={stored}')
+
+    lapsed = ('lapsed@example.com', 'premium', now - 86400.0, 2, None)
+    graced = ('grace@example.com', 'premium', now + 86400.0, 1, now + 2 * 86400.0)
+    addressless = ('user-tanpa-email', 'premium', now - 86400.0, 2, None)
+    for row in (lapsed, graced, addressless):
+        con.execute(
+            'INSERT OR REPLACE INTO subscription_status '
+            '(user_id, plan, expires_at, retry_count, grace_until, updated_at) '
+            'VALUES (?, ?, ?, ?, ?, ?)', (*row, now),
+        )
+    con.commit()
+    letters = _Mailbox()
+    retention = retention_mod.RetentionAgent(con=con, transport=letters)
+    segment = retention.segment_users(now=now)
+    check('w6: retention segments expired and in-grace subscribers',
+          {row['user_id'] for row in segment} == {'lapsed@example.com', 'grace@example.com',
+                                                  'user-tanpa-email'}, str(segment))
+    campaign = retention.send_campaign(segment, now=now)
+    check('w6: the campaign mails the address it has and skips an id that is not one',
+          campaign['sent'] == 2 and 'user-tanpa-email' in campaign['skipped'], str(campaign))
+    check('w6: the letter is a real re-engagement letter, not a stub',
+          len(letters.sent) == 2 and 'AniWatch' in letters.sent[0].get_content())
+    check('w6: a delivered campaign is not repeated inside the cooldown',
+          [row['user_id'] for row in retention.segment_users(now=now)] == ['user-tanpa-email'],
+          str(retention.segment_users(now=now)))
+    check('w6: after the cooldown the same user is a candidate again',
+          len(retention.segment_users(now=now + 8 * 86400)) == len(segment))
+
+    warmer = cache_warmer.CacheWarmerAgent(con=con)
+    cold = warmer.run(now=now)
+    check('w6: without CDN_BASE_URL the warmer says there is nowhere to warm',
+          cold['warmed'] == 0 and 'CDN_BASE_URL' in str(cold['reason']), str(cold))
+    check('w6: trending is the live episodes this fork knows about',
+          'selfcheck-w5-live' in [row['episode_id'] for row in warmer.get_trending()])
+    warmer.close()
+
+    weekly = marketing.MarketingAgent().weekly_report(now=now)
+    text = Path(weekly['report']).read_text(encoding='utf-8')
+    check('w6: the weekly report is a file naming its week and its data source',
+          weekly['week'] == marketing.week_label(now) and 'feed+local' in text
+          and '## Support' in text, weekly['report'])
+    check('w6: the report summary is not posted to Discord when the webhook is empty',
+          weekly['discord'] is False and 'DISCORD_WEBHOOK_URL' in str(weekly['discord_reason']),
+          str(weekly['discord_reason']))
+
+    reported = w4jobs.run_marketing_report(now=now)
+    check('w6: weekly_report runs the weekly_analytics trigger through the Orchestrator',
+          reported.get('role') == 'Marketing'
+          and (reported.get('work') or {}).get('action') == 'reported', str(reported.get('role')))
+    rec_job = w4jobs.run_recommendation_batch(now=now)
+    check('w6: the recommendation_batch job writes where it says it does',
+          rec_job['target'] == 'db' and rec_job['users'] == 3, str(rec_job))
+    warm_job = w4jobs.run_cache_warmer(now=now)
+    check('w6: the cache_warmer job reports its reason instead of a fake warm count',
+          warm_job['warmed'] == 0 and bool(warm_job['reason']), str(warm_job))
+    check('w6: the five growth triggers run agent work, not just characters',
+          all(name in w4triggers.AGENT_HANDLERS for name in
+              ('analytics_ready', 'weekly_analytics', 'content_schedule', 'announce_episode',
+               'retention_check')), str(sorted(w4triggers.AGENT_HANDLERS)))
 
     support.close()
 

@@ -3,13 +3,11 @@
 Split out of `scheduler.py` so a job can be called and checked without
 APScheduler installed or started (SCHEDULER.md §6: "jalankan satu job manual").
 
-Only the jobs whose work exists are here. The rest in SCHEDULER.md §2 call
-agents that land in W6-W9, so they are listed as `PENDING_JOBS` in
-`scheduler.py` and logged at startup instead of being registered as no-ops: a
-job that pretends to run is worse than one that says it is not built yet.
-
-`email_check` is still pending on purpose even though Support exists: it needs
-the Gmail API, and a job that polls nothing would only fill the log.
+Every job in SCHEDULER.md §2 has its work here since W6: the growth jobs
+(`weekly_report`, `cache_warmer`, `recommendation_batch`) call the agents in
+`hermes_agents/analytics.py`, `marketing.py`, `cache_warmer.py` and
+`recommendation.py`. `scheduler.PENDING_JOBS` stays as the honest place to park
+a job whose work is not built; it is empty while every one of them is.
 
 Every function is safe to call twice and safe to call with no office running -
 none of them sends an office event (SCHEDULER.md §1 rule 1: cleanup, sweep and
@@ -211,6 +209,51 @@ def run_episode_scheduler() -> list[dict]:
     for row in published:
         log.info('episode_embargo: %s live', row.get('episode_id'))
     return published
+
+
+def run_marketing_report(now: float | None = None) -> dict:
+    """Monday 09.00: the weekly report, through the Orchestrator (W6).
+
+    SCHEDULER.md §2 marks this job as one that goes through the Orchestrator, so
+    it does not import the agent: it runs the `weekly_analytics` trigger, which
+    draws Orchestrator -> Marketing exactly like a webhook would.
+    """
+    from . import triggers
+
+    result = triggers.run_trigger(
+        'weekly_analytics',
+        {'source': 'scheduler', 'now': time.time() if now is None else now},
+        'scheduler',
+    )
+    log.info('weekly_report: %s', (result.get('work') or {}).get('report'))
+    return result
+
+
+def run_cache_warmer(now: float | None = None) -> dict:
+    """Daily 17.00: warm the CDN for the newest live episodes (W6).
+
+    Internal job (no Orchestrator, no character): a warm cache is not work a
+    person watches, and SCHEDULER.md §2 keeps it out of the trigger path.
+    """
+    from hermes_agents.cache_warmer import CacheWarmerAgent
+
+    agent = CacheWarmerAgent()
+    try:
+        result = agent.run(now=now)
+    finally:
+        agent.close()
+    log.info('cache_warmer: %d hangat dari %d episode', result['warmed'], result['trending'])
+    return result
+
+
+def run_recommendation_batch(now: float | None = None) -> dict:
+    """Sunday 22.00: co-view recommendations, written to AniWatch or a file (W6)."""
+    from hermes_agents.recommendation import RecommendationAgent
+
+    result = RecommendationAgent().run_batch(now=now)
+    log.info('recommendation_batch: %d baris untuk %d user -> %s',
+             result['recommendations'], result['users'], result['target'])
+    return result
 
 
 def backup_databases(dest: Path | None = None, now: float | None = None) -> list[Path]:

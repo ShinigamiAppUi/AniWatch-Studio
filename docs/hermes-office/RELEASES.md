@@ -74,7 +74,7 @@ dengan DMCA cancel yang menang balapan dan penjaga duplikat. 37 cek lama di self
 
 | Minggu | Yang belum |
 | --- | --- |
-| W6 | Marketing, CacheWarmer, RecommendationAgent, `weekly_report`, `cache_warmer`, `recommendation_batch` |
+| W6 | ~~Marketing, CacheWarmer, RecommendationAgent, `weekly_report`, `cache_warmer`, `recommendation_batch`~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.7 |
 | W5 sisa | ~~`email_check`, OpsAgent, Subtitle + Moderator~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.5 |
 | W7 | DesignAgent (premium) |
 | W8 | ~~`run_orchestrator`, protokol handoff, `handoff_check`~~ — **ditutup setelah tag**, lihat CHANGELOG Rev 3.6 |
@@ -87,8 +87,11 @@ Notifikasi user dan QC pipeline masih mencatat, bukan memanggil layanan luar.
 > **Setelah tag v0.5.0** (Rev 3.5, commit berikutnya): sisa W5 ditutup — `Moderator`, `OpsAgent`
 > (`ops_check` tiap jam), dan `email_check` yang **membaca** inbox lewat IMAP stdlib
 > (`hermes_agents/inbox.py`). W8 juga ditutup (Rev 3.6): protokol handoff, `run_orchestrator`, dan
-> job `handoff_check`. `pending_jobs` kini 3, semuanya milik W6. Tag tetap menunjuk commit rilis
-> pertama; catatan lengkapnya di [CHANGELOG.md](CHANGELOG.md) Rev 3.5–3.6.
+> job `handoff_check`. W6 ditutup (Rev 3.7): lima agent growth, `CacheWarmer`, laporan mingguan
+> Marketing, dan tiga job terakhir — `pending_jobs` kini kosong, sebelas job berjalan. Yang tetap
+> belum ada sesudahnya: premium pipeline (W7), Finance/Legal/Security (W9) dan dashboard (W10). Tag
+> tetap menunjuk commit rilis pertama; catatan lengkapnya di [CHANGELOG.md](CHANGELOG.md)
+> Rev 3.5–3.7.
 
 ### Cara menjalankan
 

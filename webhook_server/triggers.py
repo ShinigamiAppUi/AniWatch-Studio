@@ -12,8 +12,9 @@ here. Two things live in this file:
 
 What a trigger does: the business work, through the agents that exist so far.
 `support_ticket`/`new_email` go to `hermes_agents.support` (triage -> KB -> reply
-or escalate) and `user_report` to `hermes_agents.user_report`. The rest have no
-tool yet (W6-W9) and only draw the two characters, which is honest: the trigger
+or escalate), `user_report` to `hermes_agents.user_report`, and the growth
+triggers to `analytics.py` / `marketing.py` / `social.py` / `retention.py` (W6).
+A trigger with no tool yet only draws the two characters, which is honest: it
 was accepted, the work is not built. Work is called from here, never from the
 webhook route.
 
@@ -163,11 +164,42 @@ def _report_work(payload: object, char=None) -> dict:
     return handle_trigger(payload, char=char)
 
 
-#: trigger -> the agent work that exists. Everything else only draws characters.
+def _analytics_work(payload: object, char=None) -> dict:
+    from hermes_agents.analytics import handle_trigger
+
+    return handle_trigger(payload, char=char)
+
+
+def _marketing_work(payload: object, char=None) -> dict:
+    from hermes_agents.marketing import handle_trigger
+
+    return handle_trigger(payload, char=char)
+
+
+def _social_work(payload: object, char=None) -> dict:
+    from hermes_agents.social import handle_trigger
+
+    return handle_trigger(payload, char=char)
+
+
+def _retention_work(payload: object, char=None) -> dict:
+    from hermes_agents.retention import handle_trigger
+
+    return handle_trigger(payload, char=char)
+
+
+#: trigger -> the agent work that exists. Everything else only draws characters
+#: (`new_lead`/`form_submit`/`deal_stage_change` need the Sales agent, W10;
+#: `episode_released` announces through `pipeline.announce` after publishing).
 AGENT_HANDLERS = {
     'support_ticket': _support_work,
     'new_email': _support_work,
     'user_report': _report_work,
+    'analytics_ready': _analytics_work,
+    'weekly_analytics': _marketing_work,
+    'content_schedule': _social_work,
+    'announce_episode': _social_work,
+    'retention_check': _retention_work,
 }
 
 

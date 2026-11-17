@@ -11,11 +11,11 @@ Follows SCHEDULER.md §1 and §3:
   twenty-four times.
 - one job raising never kills the scheduler (`_guard`).
 
-Jobs implemented in W4: `episode_embargo`, `shared_context_cleanup`,
-`approval_sweep`, `db_backup` - the four whose work exists (`jobs.py`). The
-other seven in SCHEDULER.md §2 belong to agents from W5-W9; they are listed in
-`PENDING_JOBS` with the reason, logged once at startup, and **not** registered:
-a job that runs and does nothing would look like a working system.
+All 11 jobs in SCHEDULER.md §2 are registered since W6: the last three
+(`weekly_report`, `cache_warmer`, `recommendation_batch`) waited for the growth
+agents, and now have their work in `jobs.py`. `PENDING_JOBS` stays as the place
+to name a job whose work is not built yet - a job that runs and does nothing
+would look like a working system - and it is empty while they all are.
 """
 
 from __future__ import annotations
@@ -36,12 +36,8 @@ log = logging.getLogger(__name__)
 COMMON = dict(max_instances=1, coalesce=True, misfire_grace_time=300)
 
 #: `id` -> why it is not registered yet. Printed by `pending_jobs()` and at start.
-PENDING_JOBS: dict[str, str] = {
-    'weekly_report': 'butuh MarketingAgent + Orchestrator (W6/W8)',
-    'cache_warmer': 'butuh CacheWarmerAgent (W6)',
-    'recommendation_batch': 'butuh RecommendationAgent (W6)',
-
-}
+#: Empty since W6: every job in SCHEDULER.md §2 has its work in `jobs.py`.
+PENDING_JOBS: dict[str, str] = {}
 
 _sched: BackgroundScheduler | None = None
 _lock = threading.Lock()
@@ -92,6 +88,12 @@ def start_scheduler() -> BackgroundScheduler:
                       id='handoff_check', **COMMON)
         sched.add_job(_guard(jobs.backup_databases), 'cron', hour=2,
                       id='db_backup', **COMMON)
+        sched.add_job(_guard(jobs.run_marketing_report), 'cron', day_of_week='mon', hour=9,
+                      id='weekly_report', **COMMON)
+        sched.add_job(_guard(jobs.run_cache_warmer), 'cron', hour=17,
+                      id='cache_warmer', **COMMON)
+        sched.add_job(_guard(jobs.run_recommendation_batch), 'cron', day_of_week='sun', hour=22,
+                      id='recommendation_batch', **COMMON)
         sched.start()
         _sched = sched
 
