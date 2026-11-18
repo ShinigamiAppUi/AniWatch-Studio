@@ -29,6 +29,7 @@
 
 import { createHmac, X509Certificate } from 'node:crypto'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import https from 'node:https'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -60,6 +61,33 @@ async function until(check: () => boolean, ms = 3000): Promise<boolean> {
     await sleep(20)
   }
   return check()
+}
+
+/**
+ * A GET over TLS that carries a Host header of our choosing.
+ *
+ * Why not supertest for these: superagent builds TLS `servername` out of the
+ * Host header (node/lib/node/index.js), and Node 26 refuses an IP there with
+ * "Setting the TLS ServerName to an IP address is not permitted" before a byte
+ * leaves the client. The listener still has to see those hosts so it can
+ * refuse them, so the request goes through node:https with `servername` left
+ * unset and the certificate check off — the client's trust is not what this
+ * case is about.
+ */
+function getWithHost(port: number, host: string, path: string, authorization?: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = { Host: host }
+    if (authorization) headers.Authorization = authorization
+    const req = https.request(
+      { hostname: '127.0.0.1', port, path, method: 'GET', rejectUnauthorized: false, headers },
+      res => {
+        res.resume()
+        res.on('end', () => resolve(res.statusCode ?? 0))
+      },
+    )
+    req.on('error', reject)
+    req.end()
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -645,10 +673,8 @@ describe('the full-mode listener', () => {
 
   it('refuses any other Host (421) or Origin (403), with the secret and for the static files alike', async () => {
     for (const host of [`evil.example:${lan.port}`, '127.0.0.1', `127.0.0.1:${lan.port + 1}`, `localhost:${lan.port}`]) {
-      // Why disableTLSCerts: Node names the certificate check after the Host
-      // header, so a strict client would stop itself before the server could refuse
-      expect((await request(base).get('/config').disableTLSCerts().set('Host', host).set('Authorization', bearer(lan.secret))).status, host).toBe(421)
-      expect((await request(base).get('/').disableTLSCerts().set('Host', host)).status, host).toBe(421)
+      expect(await getWithHost(lan.port, host, '/config', bearer(lan.secret)), host).toBe(421)
+      expect(await getWithHost(lan.port, host, '/'), host).toBe(421)
     }
     for (const bad of ['null', 'https://evil.example', `http://127.0.0.1:${lan.port}`, `https://localhost:${lan.port}`, `https://127.0.0.1:${lan.port + 1}`, 'http://127.0.0.1:3334', 'http://localhost:3333']) {
       expect((await phone('get', '/config').set('Origin', bad)).status, bad).toBe(403)
