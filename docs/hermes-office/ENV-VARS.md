@@ -52,8 +52,8 @@ menerima 401 dan semua event masuk DLQ. Itu perilaku yang benar: perbarui env, r
 | `SIDECAR_URL` | tidak | URL | `http://127.0.0.1:8765` | `bridge.py`, `biz-events.js` | alamat FastAPI |
 | `WEBHOOK_SECRET` | **ya** | string | — | `webhook_server/main.py` | header `X-Webhook-Secret` |
 | `MIDTRANS_SERVER_KEY` | **ya** | string | — | `webhook_server/main.py` | verifikasi signature SHA-512 |
-| `HERMES_MODEL` | tidak | string | `nous-hermes-2` | agent, Ollama | model yang dipanggil |
-| `OLLAMA_URL` | tidak | URL | `http://127.0.0.1:11434` | agent | endpoint Ollama |
+| `HERMES_MODEL` | tidak | string | `nous-hermes-2` | *belum dipakai* | **cadangan** untuk LLM Hermes yang belum diimplementasikan — tidak ada kode yang membacanya |
+| `OLLAMA_URL` | tidak | URL | `http://127.0.0.1:11434` | *belum dipakai* | **cadangan** endpoint Ollama; sama, belum ada panggilan LLM (ADR-2) |
 | `KB_BACKEND` | tidak | enum | `sqlite` | `kb/index.py` | `sqlite` \| `chroma` |
 | `KB_MIN_SCORE` | tidak | float | `0.5` | `hermes_agents/kb.py` | ambang relevansi FTS5 (relatif!) |
 | `LOG_LEVEL` | tidak | enum | `INFO` | semua Python | `DEBUG` \| `INFO` \| `WARNING` |
@@ -224,8 +224,10 @@ MIDTRANS_SERVER_KEY=
 # TRANSLATION_PROVIDER=local   # local | deepl | openai
 
 # ── Agent ──────────────────────────────────────────────────────────────────
-HERMES_MODEL=nous-hermes-2
-OLLAMA_URL=http://127.0.0.1:11434
+# Dua baris berikut DICADANGKAN: belum ada kode yang membacanya. Agent bisnis
+# deterministik; LLM Hermes/Ollama belum diimplementasikan (DECISIONS.md ADR-2).
+# HERMES_MODEL=nous-hermes-2
+# OLLAMA_URL=http://127.0.0.1:11434
 KB_BACKEND=sqlite
 KB_MIN_SCORE=0.5
 # --- Kanal keluar Support (W5) -------------------------------------------

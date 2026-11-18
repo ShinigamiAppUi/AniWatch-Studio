@@ -1,5 +1,29 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 4.6 — 18 Nov 2026 (narasi otak agent diselaraskan dengan kode)
+
+### Diubah
+
+- Semua dokumen yang menjanjikan **LLM Hermes** (`nous-hermes-2` via Ollama) dan/atau **LangGraph**
+  kini menyatakan yang sebenarnya: agent bisnis **deterministik** (aturan + SQLite + HTTP), LLM dan
+  LangGraph **belum diimplementasikan**, dan tidak ada env var LLM yang dibaca kode. Tersentuh:
+  README (ringkasan, diagram, tabel perbedaan, Requirements, prinsip 3), ARCHITECTURE (§1 diagram,
+  §2 port, §3 tech stack, §6 alur, §7 kegagalan), BLUEPRINT (§1 dan alur §8), DECISIONS **ADR-2**
+  (ditulis ulang), ENV-VARS (§2 tabel + contoh), SECURITY §3, PLAN (tabel risiko), DOCS-PLAN
+  (baris pemeriksaan), AGENTS §5, AGENT-HANDOFFS §6.
+- `requirements.txt`: `langgraph` dihapus — tidak pernah di-import; Orchestrator adalah graph di
+  atas `dict` (`hermes_agents/orchestrator.py`). Tidak ada kode yang berubah.
+- `.env.example` dan ENV-VARS: `HERMES_MODEL` dan `OLLAMA_URL` ditandai **cadangan** dan
+  dikomentari, karena tidak ada yang membacanya.
+- README: jumlah agent bisnis 30 → **31** (5 generic + 26 AniWatch, sesudah role `Resolver`).
+
+### Batas
+
+- Ini perbaikan dokumentasi, bukan penambahan LLM. Kalau otak Hermes diinginkan, itu pekerjaan baru
+  (client Ollama + timeout + fallback) dan ADR-2 yang berlaku hari ini harus diganti lebih dulu.
+
+---
+
 ## Rev 4.5 — 17 Nov 2026 (W11d: Scraper tersambung, role Resolver)
 
 ### Ditambah

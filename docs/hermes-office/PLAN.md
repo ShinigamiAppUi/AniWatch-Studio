@@ -359,7 +359,7 @@ dulu — keduanya tidak memblokir operasional harian.
 
 | Risiko | Dampak | Mitigasi |
 | --- | --- | --- |
-| Hermes/Ollama lambat atau tidak tersedia | agent menggantung, kantor terlihat sibuk tanpa hasil | timeout LLM per langkah (60 dtk) + fallback deterministik untuk langkah non-LLM |
+| LLM (belum ada) | hari ini tidak ada efek: semua agent deterministik, tidak ada langkah LLM yang bisa menggantung | kalau LLM Hermes/Ollama ditambahkan (ADR-2): timeout 60 dtk per langkah + fallback deterministik untuk langkah non-LLM |
 | 30 karakter berdesakan | UI berat, sulit dibaca | batas aktif bersamaan 12 (Orchestrator antri sisanya); spot sudah disebar 5 ruangan |
 | Event storm dari loop SecOps | ribuan `agent_working` | SecOps hanya mengirim event saat **ada** pelanggaran, bukan tiap 10 dtk |
 | Approval ditinggal | pipeline menggantung | timeout per task (300 dtk default) + eskalasi ke antrian manusia |

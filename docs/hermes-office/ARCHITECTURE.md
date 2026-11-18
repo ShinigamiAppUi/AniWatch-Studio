@@ -25,7 +25,7 @@ Isi tiap modul ada di file topiknya.
 │  ┌──────────────────────┴───────────────────────┐       │                             │
 │  │  hermes_bridge (Python, in-process agent)    │       │                             │
 │  │  bridge.py · queue.py · shared_context.py    │       │                             │
-│  │  hermes_agents/*.py (Hermes/Ollama)          │       │                             │
+│  │  hermes_agents/*.py (deterministik)         │       │                             │
 │  └──────┬───────────────────────────┬───────────┘       │                             │
 │         │ GET /approval/{id}        │ HTTP tool calls    │                             │
 │         ▼                           ▼                    │                             │
@@ -33,7 +33,7 @@ Isi tiap modul ada di file topiknya.
 │  │ FastAPI sidecar     │────▶│  Dunia luar  │           │                             │
 │  │ :8765               │     │ Gmail, Midtrans,           │                             │
 │  │ webhook + scheduler │     │ HubSpot, Discord,          │                             │
-│  │ + approval store    │     │ Telegram, CDN, Ollama      │                             │
+│  │ + approval store    │     │ Telegram, CDN              │                             │
 │  └─────────▲───────────┘     └──────────────┘           │                             │
 │            │ POST /approval-callback                     │                             │
 │            └──────────── server/biz-events.js ───────────┘                             │
@@ -53,7 +53,7 @@ Semua listener **loopback**. Tidak ada port bisnis yang menghadap jaringan. Atur
 | Vite dev (UI) | 3333 (`AGENT_OFFICE_UI_PORT`) | `npm run dev` / `start-office.sh` | dev saja |
 | Express + WS | 3334 (`AGENT_OFFICE_PORT`) | `npm run server` | **ya** — tanpa ini tidak ada kantor |
 | FastAPI sidecar | 8765 | `uvicorn webhook_server.main:app` | ya, untuk trigger & approval |
-| Ollama (Hermes) | 11434 (default Ollama) | `ollama serve` | ya, kalau agent memakai LLM lokal |
+| Ollama (Hermes) | 11434 (default Ollama) | — | **belum dipakai**: disediakan untuk LLM yang belum diimplementasikan (ADR-2) |
 | Electron | — | `npm start` | tidak (pilihan tampilan) |
 
 `AGENT_OFFICE_PORT` dibaca oleh server, hook, `doctor`, Vite, dan desktop app — satu export
@@ -70,7 +70,7 @@ memindahkan seluruh kantor.
 | Bridge | Python 3.11 + `httpx` 0.27 | tipis, tanpa framework |
 | Sidecar | FastAPI 0.111 + Uvicorn 0.30 | bind 127.0.0.1 |
 | Scheduler | APScheduler 3.10 (BackgroundScheduler) | di proses sidecar |
-| Agent | LangGraph 0.1.14 + Hermes (`nous-hermes-2`) via Ollama | logic bisnis di sini |
+| Agent | Python deterministik (`hermes_agents/`): aturan + SQLite + HTTP | logic bisnis di sini; **tanpa** LangGraph dan **tanpa** LLM (ADR-2) |
 | KB | SQLite FTS5 (default) / Chroma 0.5 (opsional) | lihat AGENTS.md §Support |
 | Antrian gagal | SQLite `~/.hermes-office/dlq.db` | lihat DB-SCHEMA.md §dlq |
 | Integrasi luar | Gmail API, Google Calendar, HubSpot/Notion, Midtrans, Discord, Telegram, X | env di ENV-VARS.md |
@@ -107,7 +107,7 @@ post /webhook (FastAPI)  ── validate secret + trigger type
 run_orchestrator_async() ── 1 karakter Orchestrator muncul
         │
         ▼
-route_trigger() ── pilih node LangGraph
+route_trigger() ── pilih node graph Orchestrator (dict, bukan LangGraph)
         │
         ├── sales / marketing / support / ops / scraper / analytics /
         │   social_media / retention / user_report
@@ -180,7 +180,7 @@ saat menunggu approval). Peta lengkap: [ROOMS.md](ROOMS.md).
 | --- | --- | --- |
 | Express | Event masuk DLQ, UI tidak update | Agent bisnis lanjut (tidak blocking) |
 | Sidecar | Trigger & approval mati; agent yang sedang menunggu timeout | Event kantor & agent yang tidak butuh approval |
-| Ollama | Agent gagal di langkah LLM → `agent_error` | Semua yang deterministik (encoding, upload, query DB) |
+| Ollama | Tidak ada efek: belum ada langkah LLM di kode (ADR-2). Kalau nanti ditambahkan, langkah LLM yang gagal → `agent_error` | Semua agent deterministik hari ini (encoding, upload, query DB) |
 | Kantor + sidecar | Pipeline bisnis tetap jalan sendiri | — (kantor hanya cermin) |
 
 Prinsip: **kantor tidak pernah menjadi dependency pipeline.** Ini ADR-3 di [DECISIONS.md](DECISIONS.md).

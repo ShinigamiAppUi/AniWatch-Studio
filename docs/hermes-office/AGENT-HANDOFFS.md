@@ -245,7 +245,7 @@ Kalau `handoff` tidak ada dan context juga tidak ada: **jangan** mengarang lead.
 | Anti-pattern | Kenapa salah | Gantinya |
 | --- | --- | --- |
 | `run_orchestrator()` dipanggil dari agent untuk "menitip" kerja | Orchestrator jadi re-entrant, dua karakter, routing ganda | `hand_off()` + trigger baru |
-| Menyimpan seluruh state LangGraph di context | DB membengkak, schema bocor | simpan `subject` + payload minimal |
+| Menyimpan seluruh state graph Orchestrator di context | DB membengkak, schema bocor | simpan `subject` + payload minimal |
 | `SharedContext` tanpa lock | `sqlite3` dari banyak thread = `database is locked` | lock di semua method (sudah) |
 | Cleanup dihapus karena "context hilang" | DB tumbuh tanpa batas | perbaiki deadline/agent, jangan cleanup |
 | Handoff dibaca dua kali (tanpa `take`) | dua agent mengerjakan hal sama | `take()` one-shot |

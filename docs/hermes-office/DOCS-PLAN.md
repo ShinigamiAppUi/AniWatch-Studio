@@ -84,7 +84,7 @@ Dijalankan setelah semua file ditulis:
 | Setiap role di AGENTS.md ada di tabel ruangan ROOMS.md | ✅ 30/30, tidak ada yang dobel |
 | Setiap id desk di AGENTS.md ada di ROOMS.md §5 | ✅ 30/30 |
 | Setiap tabel yang disebut agent ada di DB-SCHEMA.md | ✅ tickets, user_reports, episode_schedule, subtitle_tracks, payment_events, subscription_status, premium_items, biz_metrics, context, dlq, kb_* |
-| Setiap env var yang dipakai kode ada di ENV-VARS.md | ✅ termasuk `KB_MIN_SCORE`, `OLLAMA_URL`, `GOOGLE_REFRESH_TOKEN` |
+| Setiap env var yang dipakai kode ada di ENV-VARS.md | ✅ termasuk `KB_MIN_SCORE` dan `GOOGLE_REFRESH_TOKEN`; `OLLAMA_URL`/`HERMES_MODEL` ada sebagai **cadangan** yang belum dibaca kode (ADR-2) |
 | Setiap endpoint yang disebut agent ada di API-REFERENCE.md | ✅ `/webhook`, `/approval/*`, `/biz-metrics`, `/event` |
 | Setiap job di SCHEDULER.md punya fungsi di §4 | ✅ 11/11 |
 | Tidak ada `HERMES_SIDECAR_URL` | ✅ hanya `SIDECAR_URL` |

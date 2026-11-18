@@ -701,7 +701,7 @@ adalah satu insiden, bukan aliran event.
 
 ## 5. Tim dev — 15 specialist
 
-12 dari base + 3 baru untuk AniWatch. Ini **bukan** agent LangGraph: mereka dipanggil dari chat
+12 dari base + 3 baru untuk AniWatch. Ini **bukan** agent bisnis: mereka dipanggil dari chat
 routing dan bekerja lewat Claude Code, jadi tidak punya config `BUSINESS_AGENT_CONFIGS`.
 
 | # | Key (`AGENT_CONFIGS`) | Tampilan | Fokus |

@@ -40,7 +40,7 @@ sebagai isi balasan.
 | --- | --- | --- |
 | Express | `127.0.0.1` saja | `AGENT_OFFICE_HOST` menolak selain loopback + fallback (base) |
 | Sidecar | `127.0.0.1` eksplisit | **jangan** `--host 0.0.0.0`, jangan diteruskan lewat reverse proxy |
-| Ollama | `127.0.0.1` | default Ollama; jangan expose ke LAN |
+| Ollama | `127.0.0.1` (kalau nanti dipakai) | belum ada panggilan LLM di kode (ADR-2); kalau ditambahkan, tetap loopback dan jangan expose ke LAN |
 
 Kalau butuh akses dari HP, pakai **phone mode base** (`npm run lan`) yang punya gate sendiri
 (token UI + secret + allowlist route). Jangan membuka bind server.

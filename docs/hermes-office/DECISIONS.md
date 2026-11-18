@@ -27,17 +27,27 @@ filosofi "kantor = cermin, bukan dashboard").
 
 ---
 
-## ADR-2 — LangGraph + Hermes (Ollama), bukan memanggil Claude Code
+## ADR-2 — Agent bisnis deterministik dulu; LLM Hermes/Ollama belum diimplementasikan
 
 **Konteks.** Tim dev memakai Claude Code karena itu alat kerjanya. Tim bisnis butuh agent yang
 jalan otomatis dari webhook, tanpa terminal, tanpa manusia mengetik prompt.
 
-**Keputusan.** Agent bisnis = LangGraph graph, LLM **Hermes** (`nous-hermes-2`) via Ollama lokal.
-Satu node = satu agent; Orchestrator adalah graph yang memilih node.
+**Keputusan yang berlaku di kode hari ini.** Agent bisnis di `hermes_agents/` adalah kode
+**deterministik**: aturan, SQLite, dan HTTP ke layanan luar. Tidak ada panggilan LLM dan tidak ada
+LangGraph. Satu node = satu agent; Orchestrator adalah graph pendek di atas `dict`
+(`hermes_agents/orchestrator.py`, `MAX_HOPS = 4`) yang memilih node, dan kerja antar agent dibawa
+oleh handoff di SharedContext.
 
-**Konsekuensi.** Dua runtime LLM di satu mesin (Claude Code CLI + Ollama). Biaya bisnis ~nol
-(lokal), tapi kualitas penalaran lebih rendah dari Claude — karena itu setiap keputusan berisiko
-uang atau publikasi diberi **approval gate**, bukan diserahkan ke LLM.
+**Yang belum dikerjakan.** ADR ini semula memutuskan LangGraph + LLM **Hermes**
+(`nous-hermes-2`) via Ollama lokal. Itu **belum diimplementasikan**: tidak ada kode yang memanggil
+Ollama, `HERMES_MODEL` dan `OLLAMA_URL` belum dibaca siapa pun, dan `langgraph` sengaja tidak ada
+di `requirements.txt`. Kalau nanti ditambahkan, ADR ini diperbarui lebih dulu, dan setiap keputusan
+berisiko uang atau publikasi tetap lewat **approval gate**, bukan diserahkan ke LLM.
+
+**Konsekuensi hari ini.** Nol biaya inference, dan hasilnya bisa diuji offline serta diulang persis
+(itu yang diuji `hermes_agents/selfcheck.py`). Batasnya: agent tidak punya penalaran bebas — setiap
+keputusan harus bisa dihitung ulang dari payload/DB, jadi skor, triage dan moderasi berbasis aturan
+yang alasannya ikut ditulis di hasil.
 
 **Ditolak.** Memanggil `claude -p` untuk agent bisnis (butuh sesi CLI, mahal per task, tidak bisa
 di-schedule); satu framework agent pihak ketiga (menambah dependensi yang tidak dipakai base).

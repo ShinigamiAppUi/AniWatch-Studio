@@ -137,6 +137,8 @@ curl -s -X POST http://127.0.0.1:8765/webhook \
 
 ### Batasan yang diketahui
 
+- **Otak agent deterministik:** tidak ada panggilan LLM/Ollama dan tidak ada LangGraph (ADR-2).
+  `HERMES_MODEL`/`OLLAMA_URL` hanya cadangan yang belum dibaca kode.
 - Jalur SMTP yang diuji adalah `SMTP_SECURITY=none` tanpa login; `starttls`/`ssl` + autentikasi
   memakai jalur `smtplib` standar tapi belum diuji ke provider nyata.
 - Tidak ada polling email masuk, tidak ada retry otomatis untuk kiriman yang gagal (kegagalannya

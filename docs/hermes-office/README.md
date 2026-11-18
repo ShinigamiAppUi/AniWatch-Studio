@@ -2,7 +2,12 @@
 
 Kantor virtual pixel-art untuk **dua tim dalam satu gedung**: tim dev yang sudah built-in di
 [W17ant/Claude-Office](https://github.com/W17ant/Claude-Office), dan tim bisnis AniWatch yang
-dijalankan oleh **Hermes (Nous Research) via LangGraph**.
+dijalankan oleh **agent deterministik di `hermes_agents/`** — aturan, SQLite dan HTTP, tanpa LLM.
+
+> **Otak agent hari ini deterministik.** LLM **Hermes** (`nous-hermes-2` via Ollama) dan graph
+> **LangGraph** yang disebut di revisi dokumen sebelumnya **belum diimplementasikan**: tidak ada
+> kode yang memanggil Ollama, dan `HERMES_MODEL`/`OLLAMA_URL` belum dibaca siapa pun. Alasannya di
+> [ADR-2](DECISIONS.md#adr-2--agent-bisnis-deterministik-dulu-llm-hermesollama-belum-diimplementasikan).
 
 Nov 16, 2026 · @Shin · Status dokumen: **Rev 3.1** (lengkap, siap implementasi)
 
@@ -24,7 +29,7 @@ APScheduler ──────────┤
 Chat manual ──────────┤
                       ▼
               hermes_bridge.py ──▶ Express :3334 ──WebSocket──▶ React :3333
-              (Python, LangGraph)        │
+              (Python, graph dict)       │
                                     approval callback ◀── FastAPI :8765
 ```
 
@@ -38,15 +43,15 @@ Hermes — keduanya masuk lewat `POST /event` yang sama.
 
 | Aspek | Base (Claude-Office) | Hermes Office |
 | --- | --- | --- |
-| Sumber event | Claude Code hooks (bash/Python) | hooks **+** `hermes_bridge.py` (Python/LangGraph) |
-| Agent | Claude per session + 12 specialist dev | **+ 30 agent bisnis** (5 generic + 25 AniWatch) |
+| Sumber event | Claude Code hooks (bash/Python) | hooks **+** `hermes_bridge.py` (Python) |
+| Agent | Claude per session + 12 specialist dev | **+ 31 agent bisnis** (5 generic + 26 AniWatch) |
 | Ruangan | 5 (main, corridor, meeting, server, lunch) | **9** (5 base + 4 di lantai 2) |
 | Trigger | hanya dari Claude Code | **+** webhook, APScheduler, chat manual |
-| Otak agent | Claude Code CLI (`claude -p`) | Hermes via Ollama (`nous-hermes-2`) |
+| Otak agent | Claude Code CLI (`claude -p`) | deterministik: aturan + SQLite + HTTP (LLM Hermes/Ollama: **belum diimplementasikan**) |
 | Dashboard | meters dev (cost, token, context) | **+** `BizMetricsPanel` (leads, tiket, SLA) |
 | Ketahanan event | `except: pass` (event hilang) | retry 3x + **dead-letter queue** SQLite |
 | Approval | hanya permission Claude Code | **+** approval gate agent bisnis (2 arah) |
-| Koordinasi | routing chat per specialist | **+** Orchestrator LangGraph + handoff context |
+| Koordinasi | routing chat per specialist | **+** Orchestrator (graph dict sendiri, tanpa LangGraph) + handoff context |
 
 ---
 
@@ -57,15 +62,12 @@ Hermes — keduanya masuk lewat `POST /event` yang sama.
 | Node.js | **20** (`engines.node: ">=20"`) | base menolak versi lebih lama saat install |
 | npm | 9+ | lockfile v3 |
 | Python | 3.11+ | `str \| None` di bridge, `slots`/typing modern |
-| Ollama | latest, jalan di `127.0.0.1:11434` | inference Hermes lokal |
-| Model Ollama | `nous-hermes-2` (`HERMES_MODEL`) | bisa diganti model Hermes lain |
 | SQLite | 3.35+ dengan FTS5 | knowledge base Support (FTS5 bawaan Python 3.11 aman) |
 | Claude Code CLI | opsional | hanya kalau tim dev ikut dijalankan |
 
-```bash
-ollama pull nous-hermes-2
-ollama serve
-```
+Ollama **tidak dibutuhkan**: tidak ada satu pun panggilan LLM di kode hari ini. `HERMES_MODEL` dan
+`OLLAMA_URL` masih ada di `.env.example` sebagai tempat yang disediakan untuk LLM Hermes yang
+belum diimplementasikan, dan tidak dibaca oleh kode mana pun.
 
 Cek FTS5 sekali di awal: `python3 -c "import sqlite3;print(sqlite3.sqlite_version)"`.
 
@@ -188,8 +190,8 @@ Rencana penulisan & status per file: [DOCS-PLAN.md](DOCS-PLAN.md).
 
 1. **Jangan sentuh base lebih dari yang perlu.** UI, animasi, karakter, 5 ruangan, meters dev: utuh.
 2. **Business event adalah event biasa.** Semua lewat `POST /event`, bukan jalur kedua.
-3. **Bridge itu tipis.** `hermes_bridge` hanya menerjemahkan state LangGraph → format event kantor.
-   Logic bisnis tetap di agent.
+3. **Bridge itu tipis.** `hermes_bridge` hanya menerjemahkan state agent (graph Orchestrator di atas
+   `dict`) → format event kantor. Logic bisnis tetap di agent.
 4. **Reliability dulu.** Event tidak boleh hilang karena kantor mati: retry + DLQ.
 5. **Satu trigger, satu pintu.** Semua trigger bisnis masuk lewat Orchestrator (Fix 4/5 di
    [BLUEPRINT.md](BLUEPRINT.md)), bukan memanggil agent langsung dari webhook/scheduler.

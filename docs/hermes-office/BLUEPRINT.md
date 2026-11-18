@@ -16,8 +16,9 @@ diperluas untuk menampung **dua tim** dalam satu kantor virtual:
 - **Tim Dev** — sudah ada di base, zero config. Sumber event: Claude Code hooks. Karakter: satu
   Claude per session terminal + subagent specialist. 12 specialist routing + 3 baru (Player,
   Stream, Mobile Dev).
-- **Tim Bisnis** — ditambahkan di fork ini. Sumber event: `hermes_bridge.py`. 30 agent
-  (5 generic + 25 AniWatch), dijalankan LangGraph + Hermes via Ollama.
+- **Tim Bisnis** — ditambahkan di fork ini. Sumber event: `hermes_bridge.py`. 31 agent
+  (5 generic + 26 AniWatch), dijalankan kode **deterministik** di `hermes_agents/` (aturan + SQLite
+  + HTTP). LangGraph dan LLM Hermes/Ollama **belum diimplementasikan** — lihat [ADR-2](DECISIONS.md).
 
 Filosofi base tidak berubah: **kantor adalah cermin apa yang agent sedang lakukan**, bukan
 dashboard terpisah. Setiap event (spawn, tool call, selesai, error, menunggu) langsung terpantul
@@ -176,7 +177,7 @@ jadi `validateEvent` base tidak perlu diubah. Detail field: [API-REFERENCE.md](A
 1. Trigger masuk       webhook / APScheduler / chat manual
 2. Orchestrator        route_trigger() → pilih agent
 3. agent_spawned       karakter muncul di ruangan sesuai ROOMS.md
-4. LangGraph loop      tiap tool: agent_working  (+ update_biz_metrics di akhir tool berat)
+4. Agent loop          tiap tool: agent_working  (+ update_biz_metrics di akhir tool berat)
 5. Butuh manusia?      agent_waiting → card ✋ → poll 3 dtk, timeout sesuai task
 6. Selesai             agent_completed → 👍 → keluar lewat pintu
    Gagal               agent_error → retry sekali → kalau gagal lagi, escalate
