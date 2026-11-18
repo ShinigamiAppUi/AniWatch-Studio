@@ -164,8 +164,18 @@ async function downloadFile(url, dest, { maxBytes, ...opts }) {
       out.destroy()
       // Why only a file this call made: when `wx` refused, what is at `dest`
       // was there before and is not this function's to remove.
-      if (!created) return reject(err)
-      fs.rm(dest, { force: true }, () => reject(err))
+      const clean = () => {
+        if (!created) return reject(err)
+        fs.rm(dest, { force: true }, () => reject(err))
+      }
+      // Why wait for `close` instead of reading `created` now: over a fast
+      // loopback the first chunk can reach us before the file handle is open,
+      // so at the moment the cap trips `created` is still false even though
+      // `wx` is about to make the file. `close` arrives after `open` (it opened,
+      // so the file is ours) and after the EEXIST error (it did not, so it is
+      // not), and by then `created` says which happened.
+      if (out.closed) return clean()
+      out.once('close', clean)
     }
     res.on('data', (chunk) => {
       size += chunk.length
