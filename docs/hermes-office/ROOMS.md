@@ -122,7 +122,9 @@ geser dengan `/?helper&room=<id>` kalau perlu, lalu perbarui tabel ini dan kode 
 ### 5.1 Main Office — `biz-m1..m3`
 
 Deretan meja paling kanan-belakang, di luar 10 `spot-*` dev (dan tidak pernah dipakai hire dev:
-`pickSpot` melewati semua `biz-*`).
+`pickSpot` melewati semua `biz-*`). Tiap spot punya mejanya sendiri di `furniture`
+(`biz-desk-m1..biz-desk-m3`, sprite `desk-standing-left-front`/`-right-front` bergantian karena
+ketiganya menghadap kamera, anchor sama dengan spotnya, `zIndex` = zIndex spot − 2).
 
 | Desk | Role | x | y | facing | zIndex |
 | --- | --- | --- | --- | --- | --- |
@@ -156,7 +158,10 @@ sedangkan meja satu langkah lebih depan menutup worker di belakangnya.
 
 ### 5.3 Business Suite — `biz-b1..b6`
 
-Meja rapat panjang, art `meeting-room.png`. Empat dipakai, dua cadangan untuk agent generic baru.
+Enam meja kerja, art `meeting-room.png`. Empat dipakai, dua cadangan untuk agent generic baru.
+Tiap spot punya mejanya sendiri (`biz-desk-b1..biz-desk-b6`): empat kursi yang menghadap kamera
+memakai sprite `-front`, dua kursi `facing: 'up'` memakai `-rear`; anchor sama dengan spotnya,
+`zIndex` = zIndex spot − 2.
 
 | Desk | Role | x | y | facing |
 | --- | --- | --- | --- | --- |
@@ -169,7 +174,9 @@ Meja rapat panjang, art `meeting-room.png`. Empat dipakai, dua cadangan untuk ag
 
 ### 5.4 Creative Studio — `biz-c1..c10`
 
-Art `main-office.png`; 10 kursi = tepat 10 agent Growth + Premium.
+Art `main-office.png`; 10 kursi = tepat 10 agent Growth + Premium, masing-masing dengan mejanya
+sendiri (`biz-desk-c1..biz-desk-c10`, sprite `-front` bergantian kiri/kanan, `zIndex` = zIndex
+spot − 2).
 
 | Desk | Role | x | y |
 | --- | --- | --- | --- |
@@ -186,7 +193,9 @@ Art `main-office.png`; 10 kursi = tepat 10 agent Growth + Premium.
 
 ### 5.5 Finance & Legal — `biz-f1..f4`
 
-Art `server-room.png`; empat meja berkas.
+Art `server-room.png`; empat meja berkas (`biz-desk-f1..biz-desk-f4`). Keempat kursi menghadap
+dinding (`facing: 'up'`), jadi sprite-nya `-rear`; anchor sama dengan spotnya, `zIndex` = zIndex
+spot − 2.
 
 | Desk | Role | x | y |
 | --- | --- | --- | --- |
@@ -197,7 +206,9 @@ Art `server-room.png`; empat meja berkas.
 
 ### 5.6 Exec Floor — `exec-1..exec-2`
 
-Art `meeting-room.png`. Dua meja kerja: `exec-1` (33.3, 64.4, down) dan `exec-2` (38.6, 60.8, down).
+Art `meeting-room.png`. Dua meja kerja: `exec-1` (33.3, 64.4, down) dan `exec-2` (38.6, 60.8, down),
+masing-masing dengan mejanya sendiri (`exec-desk-1`/`exec-desk-2`, sprite `-front`, `zIndex` = zIndex
+spot − 2).
 Karakter `boss` tetap memakai `spot-1` di Main Office; ruangan ini untuk exec/agent bisnis yang
 didaftarkan di `BUSINESS_AGENT_CONFIGS` atau untuk sesi review.
 

@@ -1,5 +1,32 @@
 # Hermes Office — Changelog (dokumen)
 
+## Rev 4.7 — 18 Nov 2026 (meja untuk 25 kursi bisnis yang masih kosong)
+
+### Ditambah
+
+- `src/rooms.ts`: **25 meja** untuk spot bisnis yang sebelumnya duduk di lantai kosong —
+  `biz-desk-m1..m3` (Main Office), `biz-desk-b1..b6` (Business Suite), `biz-desk-c1..c10`
+  (Creative Studio), `biz-desk-f1..f4` (Finance & Legal), `exec-desk-1..2` (Exec Floor). Semuanya
+  memakai aturan yang sudah dipakai Core Ops di Server Room: anchor sama dengan spotnya, `zIndex`
+  = zIndex spot − 2, sprite `desk-standing` `-front` untuk kursi yang menghadap kamera dan `-rear`
+  untuk yang menghadap dinding, kiri/kanan bergantian.
+
+### Diubah
+
+- ROOMS.md §5.1 dan §5.3–§5.6 menyebut id meja tiap ruangan; §5.3 tidak lagi menyebut "meja
+  rapat panjang" karena Business Suite kini enam meja kerja, sesuai keputusan 18 Nov.
+
+### Batas
+
+- Ini penempatan sprite, bukan art baru: `public/` tidak bertambah satu file pun (budget 69.6/70 MB
+  tetap). Posisi meja mengikuti koordinat kursi yang sudah ada, jadi kalau satu meja terlihat
+  menimpa furnitur lain (mis. printer di Main Office), geser lewat `/?helper&room=<id>` lalu
+  perbarui `src/rooms.ts` dan tabel ROOMS.md sekaligus.
+- Tampilan belum diperiksa di browser; yang diverifikasi `tsc`, test ruangan, dan hitungan
+  meja-per-spot.
+
+---
+
 ## Rev 4.6 — 18 Nov 2026 (narasi otak agent diselaraskan dengan kode)
 
 ### Diubah

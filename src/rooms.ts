@@ -158,6 +158,12 @@ export const ROOMS: Record<RoomId, Room> = {
       { id: 'desk-3b', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 62.6, y: 76 },
       { id: 'desk-3c', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 55.4, y: 78.7 },
       { id: 'desk-3d', type: 'desk-standing', sprite: 'desk-standing-right-rear', x: 66.6, y: 71.1 },
+      // Business desks (Support, Moderator, UserReportAgent): one per biz-m spot, the
+      // back row by the cabinet. Same rule as the server room: the desk shares its
+      // spot's anchor with zIndex two lower, so its worker is drawn on top of it.
+      { id: 'biz-desk-m1', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 74.5, y: 63.5, zIndex: 60 },
+      { id: 'biz-desk-m2', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 79.0, y: 60.0, zIndex: 58 },
+      { id: 'biz-desk-m3', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 83.0, y: 57.0, zIndex: 56 },
       // Coffee machine on counter
       { id: 'coffee', type: 'coffee-machine', sprite: 'coffee-off', x: 78.5, y: 50.2, interactive: true, state: 'off', label: 'Coffee Machine' },
       // Filing cabinet
@@ -615,7 +621,17 @@ export const ROOMS: Record<RoomId, Room> = {
     },
     width: 800,
     height: 600,
-    furniture: [],
+    furniture: [
+      // One desk per biz-b seat: four around the suite, two spare places for a new
+      // generic role. Same rule as the server room (anchor = the seat, zIndex two
+      // lower); the two seats facing away from the camera take the rear sprites.
+      { id: 'biz-desk-b1', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 33.3, y: 64.4, zIndex: 38 },
+      { id: 'biz-desk-b2', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 38.6, y: 60.8, zIndex: 39 },
+      { id: 'biz-desk-b3', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 43.9, y: 57.1, zIndex: 40 },
+      { id: 'biz-desk-b4', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 49.2, y: 53.5, zIndex: 41 },
+      { id: 'biz-desk-b5', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 46.5, y: 74.1, zIndex: 58 },
+      { id: 'biz-desk-b6', type: 'desk-standing', sprite: 'desk-standing-right-rear', x: 52.0, y: 70.3, zIndex: 59 },
+    ],
     connections: [
       { toRoom: 'corridor', position: { x: 68, y: 51.5 }, label: 'Corridor (lift)', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 64.8, y: 21.8, w: 8.4, h: 28.4 } },
     ],
@@ -653,7 +669,20 @@ export const ROOMS: Record<RoomId, Room> = {
     },
     width: 800,
     height: 600,
-    furniture: [],
+    furniture: [
+      // One desk per biz-c seat: ten Growth and Premium agents, ten desks, in the
+      // same clusters the office art has room for. Same rule as the server room.
+      { id: 'biz-desk-c1', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 25.8, y: 71.0, zIndex: 83 },
+      { id: 'biz-desk-c2', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 37.9, y: 68.2, zIndex: 83 },
+      { id: 'biz-desk-c3', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 26.9, y: 59.2, zIndex: 38 },
+      { id: 'biz-desk-c4', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 38.5, y: 55.2, zIndex: 56 },
+      { id: 'biz-desk-c5', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 48.9, y: 52.9, zIndex: 68 },
+      { id: 'biz-desk-c6', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 38.8, y: 43.6, zIndex: 28 },
+      { id: 'biz-desk-c7', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 52.7, y: 78.8, zIndex: 93 },
+      { id: 'biz-desk-c8', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 65.9, y: 75.8, zIndex: 93 },
+      { id: 'biz-desk-c9', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 55.2, y: 66.8, zIndex: 53 },
+      { id: 'biz-desk-c10', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 68.7, y: 66.2, zIndex: 53 },
+    ],
     connections: [
       { toRoom: 'corridor', position: { x: 67.5, y: 48.9 }, label: 'Corridor (lift)', exitFacing: 'rear-right', entryFacing: 'front-right', door: { x: 64.8, y: 21.8, w: 7.7, h: 27.3 } },
     ],
@@ -710,7 +739,14 @@ export const ROOMS: Record<RoomId, Room> = {
     },
     width: 800,
     height: 600,
-    furniture: [],
+    furniture: [
+      // Four file desks, one per biz-f seat. All four face away from the camera
+      // (towards the wall), so they take the rear sprites.
+      { id: 'biz-desk-f1', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 30.4, y: 61.0, zIndex: 52 },
+      { id: 'biz-desk-f2', type: 'desk-standing', sprite: 'desk-standing-right-rear', x: 35.3, y: 57.7, zIndex: 51 },
+      { id: 'biz-desk-f3', type: 'desk-standing', sprite: 'desk-standing-left-rear', x: 40.1, y: 54.3, zIndex: 50 },
+      { id: 'biz-desk-f4', type: 'desk-standing', sprite: 'desk-standing-right-rear', x: 45.0, y: 50.9, zIndex: 49 },
+    ],
     connections: [
       { toRoom: 'corridor', position: { x: 68.5, y: 53 }, label: 'Corridor (lift)', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 64.6, y: 24, w: 9.4, h: 29.6 } },
     ],
@@ -744,7 +780,11 @@ export const ROOMS: Record<RoomId, Room> = {
     },
     width: 800,
     height: 600,
-    furniture: [],
+    furniture: [
+      // Two work desks for the two exec seats, facing the camera.
+      { id: 'exec-desk-1', type: 'desk-standing', sprite: 'desk-standing-left-front', x: 33.3, y: 64.4, zIndex: 38 },
+      { id: 'exec-desk-2', type: 'desk-standing', sprite: 'desk-standing-right-front', x: 38.6, y: 60.8, zIndex: 39 },
+    ],
     connections: [
       { toRoom: 'corridor', position: { x: 68, y: 51.5 }, label: 'Corridor (lift)', exitFacing: 'rear-right', entryFacing: 'front-left', door: { x: 64.8, y: 21.8, w: 8.4, h: 28.4 } },
     ],
